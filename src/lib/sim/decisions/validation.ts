@@ -210,7 +210,12 @@ function cleanReasoningText(text: string): string {
     if (lastPeriod > maxChars * 0.5) {
       return truncated.slice(0, lastPeriod + 1);
     }
-    return truncated.trim() + "...";
+    const ellipsis = "...";
+    if (maxChars <= ellipsis.length) {
+      return truncated.trim();
+    }
+    const maxEllipsisChars = maxChars - ellipsis.length;
+    return cleaned.slice(0, maxEllipsisChars).trim() + ellipsis;
   }
 
   return cleaned;
