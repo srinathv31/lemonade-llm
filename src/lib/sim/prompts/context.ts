@@ -150,9 +150,9 @@ export function normalizeContext(context: PromptContext): PromptContext {
         return b.hour - a.hour;
       })
       .slice(0, MAX_HISTORY_ENTRIES),
-    // Sort competitors by agentId for deterministic ordering
+    // Sort competitors by agentId for deterministic ordering (locale-independent)
     competitorDecisions: [...context.competitorDecisions].sort((a, b) =>
-      a.agentId.localeCompare(b.agentId)
+      a.agentId < b.agentId ? -1 : a.agentId > b.agentId ? 1 : 0
     ),
   };
 }
