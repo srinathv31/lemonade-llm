@@ -1,3 +1,30 @@
+/**
+ * Decision Validation Module
+ *
+ * NOTE ON LENIENT PARSING:
+ * This module includes a lenient parsing path (rawLLMDecisionSchema + coercion)
+ * that is NOT currently used in the main agent-turn flow.
+ *
+ * Why it's unused:
+ * - agent-turn.ts uses AI SDK's Output.object() with agentDecisionSchema
+ * - The AI SDK validates strictly BEFORE returning the response
+ * - If validation fails, AI SDK throws an error (caught as retry/fallback)
+ * - parseAgentDecision() only receives pre-validated objects, so the lenient
+ *   path (Stage 2 in parseAgentDecision) never executes
+ *
+ * Why we keep it:
+ * - Testing: Allows mocking LLM responses without strict schema compliance
+ * - Alternative providers: Some LLM providers may not enforce schemas as strictly
+ * - Direct usage: Other code paths may call parseAgentDecision() directly
+ * - Future flexibility: If we switch away from Output.object() or need lenient mode
+ *
+ * What IS used in the current flow:
+ * - Strict validation (Stage 1)
+ * - CoT pattern stripping from reasoning
+ * - Reasoning truncation to 500 chars
+ * - Metadata tracking (wasCoerced, reasoningTruncated)
+ */
+
 import {
   agentDecisionSchema,
   rawLLMDecisionSchema,

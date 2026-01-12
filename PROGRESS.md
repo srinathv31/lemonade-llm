@@ -24,14 +24,15 @@
   - Deterministic prompt construction with stable hashing
   - Files: `src/lib/sim/prompts/{types,templates,context,builder,index}.ts`
 
-## In Progress
-- [ ] Step 5: Agent Turn Runner
-  - Run a single agent for one tick
-  - Validation + retries + fallback
-  - Persist agent_decisions
-  - Write agent_turn artifact (redacted by default)
+- [x] Step 5: Agent Turn Runner
+  - `runAgentTurn()` function with generateObject + agentDecisionSchema
+  - 2 retries with exponential backoff (500ms, 1000ms)
+  - Fallback to previous/default decision if all attempts fail
+  - Persists to `agent_decisions` and `simulation_artifacts` tables
+  - Artifacts redacted by default (raw I/O only with `STORE_RAW_LLM_IO=true` in non-prod)
+  - Files: `src/lib/sim/engine/{types,agent-turn,index}.ts`
 
-## Upcoming
+## In Progress
 - [ ] Step 6: Timeline Bootstrap (Days & Ticks)
   - Ensure simulation_day exists (seed, env snapshot)
   - Ensure simulation_tick exists (tick snapshot, status)

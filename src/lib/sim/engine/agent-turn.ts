@@ -1,0 +1,501 @@
+import { generateText, Output } from "ai";
+import { ollama } from "../../ollama";
+import db from "../../db/drizzle";
+import {
+  agent_decisions,
+  simulation_artifacts,
+} from "../../db/drizzle/schema";
+import { buildDecisionPrompt, type BuiltPrompt } from "../prompts";
+import {
+  agentDecisionSchema,
+  parseAgentDecision,
+  createFallbackDecision,
+  type AgentDecision,
+} from "../decisions";
+import type {
+  AgentTurnParams,
+  AgentTurnResult,
+  AgentTurnMetadata,
+  LLMAttemptResult,
+  AgentTurnArtifactPayload,
+  AgentTurnLogEntry,
+} from "./types";
+
+// ========================================
+// Configuration
+// ========================================
+
+const MAX_ATTEMPTS = 3; // 1 initial + 2 retries
+
+/**
+ * Calculate retry delay with exponential backoff.
+ * Attempt 1 -> no delay (initial)
+ * Attempt 2 -> 500ms delay
+ * Attempt 3 -> 1000ms delay
+ */
+function getRetryDelay(attemptNumber: number): number {
+  return Math.pow(2, attemptNumber - 1) * 500;
+}
+
+/**
+ * Promise-based delay helper.
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ========================================
+// Logging (CLAUDE.md Compliant)
+// ========================================
+
+/**
+ * Structured logging helper (per CLAUDE.md guidelines).
+ * Only logs in development to avoid noise in production.
+ * NEVER logs raw prompts or responses.
+ */
+function logAgentTurnOperation(entry: AgentTurnLogEntry): void {
+  if (process.env.NODE_ENV === "development") {
+    console.log(JSON.stringify(entry));
+  }
+}
+
+// ========================================
+// Main Function
+// ========================================
+
+/**
+ * Run a single agent for one tick.
+ *
+ * This function:
+ * 1. Builds the decision prompt
+ * 2. Calls the LLM with up to 2 retries
+ * 3. Validates and parses the response
+ * 4. Falls back to previous/default decision if all attempts fail
+ * 5. Persists the decision to agent_decisions table
+ * 6. Writes an agent_turn artifact (redacted by default)
+ *
+ * IMPORTANT: This function NEVER throws. All errors are captured in the result.
+ */
+export async function runAgentTurn(
+  params: AgentTurnParams
+): Promise<AgentTurnResult> {
+  const startTime = Date.now();
+  const {
+    simulationId,
+    agentId,
+    tickId,
+    day,
+    hour,
+    modelName,
+    promptContext,
+    previousDecision,
+  } = params;
+
+  logAgentTurnOperation({
+    timestamp: new Date().toISOString(),
+    operation: "runAgentTurn",
+    status: "start",
+    simulationId,
+    agentId,
+    tickId,
+    day,
+    hour,
+    model: modelName,
+  });
+
+  // Step 1: Build prompt
+  const builtPrompt = buildDecisionPrompt(promptContext);
+
+  // Step 2: Attempt LLM call with retries
+  let lastError: string | undefined;
+  let attemptCount = 0;
+  let decision: AgentDecision | undefined;
+  let wasCoerced = false;
+  let reasoningTruncated = false;
+  let rawResponse: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    attemptCount = attempt;
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "llmAttempt",
+      status: attempt === 1 ? "start" : "retry",
+      simulationId,
+      agentId,
+      tickId,
+      day,
+      hour,
+      model: modelName,
+      attemptNumber: attempt,
+      promptHash: builtPrompt.promptHash,
+    });
+
+    const attemptResult = await attemptLLMCall(
+      modelName,
+      builtPrompt.prompt,
+      agentId
+    );
+
+    if (attemptResult.success && attemptResult.decision) {
+      decision = attemptResult.decision;
+      wasCoerced = attemptResult.wasCoerced;
+      reasoningTruncated = attemptResult.reasoningTruncated;
+      rawResponse = attemptResult.rawResponse;
+
+      logAgentTurnOperation({
+        timestamp: new Date().toISOString(),
+        operation: "llmAttempt",
+        status: "success",
+        simulationId,
+        agentId,
+        tickId,
+        day,
+        hour,
+        model: modelName,
+        attemptNumber: attempt,
+        promptHash: builtPrompt.promptHash,
+      });
+
+      break;
+    }
+
+    lastError = attemptResult.error;
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "llmAttempt",
+      status: "error",
+      simulationId,
+      agentId,
+      tickId,
+      day,
+      hour,
+      model: modelName,
+      attemptNumber: attempt,
+      promptHash: builtPrompt.promptHash,
+      error: lastError,
+    });
+
+    // Don't delay after last attempt
+    if (attempt < MAX_ATTEMPTS) {
+      await delay(getRetryDelay(attempt));
+    }
+  }
+
+  // Step 3: Use fallback if all attempts failed
+  const usedFallback = !decision;
+  if (!decision) {
+    decision = createFallbackDecision({ agentId, previousDecision });
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "runAgentTurn",
+      status: "fallback",
+      simulationId,
+      agentId,
+      tickId,
+      day,
+      hour,
+      model: modelName,
+      promptHash: builtPrompt.promptHash,
+      error: lastError,
+    });
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  // Step 4: Build metadata
+  const metadata: AgentTurnMetadata = {
+    modelName,
+    promptHash: builtPrompt.promptHash,
+    schemaHash: builtPrompt.schemaHash,
+    durationMs,
+    attemptCount,
+    usedFallback,
+    wasCoerced,
+    reasoningTruncated,
+  };
+
+  // Step 5: Persist decision and artifact
+  const { decisionId, artifactId } = await persistTurnData({
+    params,
+    decision,
+    metadata,
+    builtPrompt,
+    rawResponse,
+    error: usedFallback ? lastError : undefined,
+  });
+
+  logAgentTurnOperation({
+    timestamp: new Date().toISOString(),
+    operation: "runAgentTurn",
+    status: usedFallback ? "error" : "success",
+    simulationId,
+    agentId,
+    tickId,
+    day,
+    hour,
+    model: modelName,
+    duration: durationMs,
+    promptHash: builtPrompt.promptHash,
+    error: usedFallback ? lastError : undefined,
+  });
+
+  // Step 6: Return result
+  if (usedFallback) {
+    return {
+      success: false,
+      decision,
+      decisionId,
+      artifactId,
+      error: lastError ?? "All LLM attempts failed",
+      metadata,
+    };
+  }
+
+  return {
+    success: true,
+    decision,
+    decisionId,
+    artifactId,
+    metadata,
+  };
+}
+
+// ========================================
+// LLM Call
+// ========================================
+
+/**
+ * Attempt a single LLM call with validation.
+ * Returns structured result - never throws.
+ */
+async function attemptLLMCall(
+  modelName: string,
+  prompt: string,
+  agentId: string
+): Promise<LLMAttemptResult> {
+  try {
+    const result = await generateText({
+      model: ollama(modelName),
+      prompt,
+      output: Output.object({
+        schema: agentDecisionSchema,
+      }),
+    });
+
+    // generateText with Output.object validates against schema, but we still run through
+    // parseAgentDecision for CoT cleanup and reasoning truncation
+    const parseResult = parseAgentDecision(result.output, agentId);
+
+    if (parseResult.success) {
+      return {
+        success: true,
+        decision: parseResult.decision,
+        rawResponse: result.output,
+        wasCoerced: parseResult.metadata.wasCoerced,
+        reasoningTruncated: parseResult.metadata.reasoningTruncated,
+      };
+    }
+
+    return {
+      success: false,
+      error: parseResult.error,
+      rawResponse: result.output,
+      wasCoerced: false,
+      reasoningTruncated: false,
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown LLM error";
+    return {
+      success: false,
+      error: errorMessage,
+      wasCoerced: false,
+      reasoningTruncated: false,
+    };
+  }
+}
+
+// ========================================
+// Persistence
+// ========================================
+
+interface PersistTurnDataParams {
+  params: AgentTurnParams;
+  decision: AgentDecision;
+  metadata: AgentTurnMetadata;
+  builtPrompt: BuiltPrompt;
+  rawResponse?: unknown;
+  error?: string;
+}
+
+interface PersistTurnDataResult {
+  decisionId: string;
+  artifactId: string;
+}
+
+/**
+ * Persist decision and artifact to database.
+ *
+ * Both inserts are wrapped in a transaction to ensure atomicity.
+ * If either insert fails, both are rolled back.
+ *
+ * Order:
+ * 1. INSERT agent_decisions (normalized business state)
+ * 2. INSERT simulation_artifacts (immutable audit log)
+ */
+async function persistTurnData(
+  data: PersistTurnDataParams
+): Promise<PersistTurnDataResult> {
+  const { params, decision, metadata, builtPrompt, rawResponse, error } = data;
+
+  const { payload, isRedacted } = buildArtifactPayload(
+    params,
+    decision,
+    metadata,
+    builtPrompt,
+    error,
+    rawResponse
+  );
+
+  // Wrap both inserts in a transaction for atomicity
+  const result = await db.transaction(async (tx) => {
+    // Insert decision record
+    const [decisionRow] = await tx
+      .insert(agent_decisions)
+      .values({
+        simulation_id: params.simulationId,
+        agent_id: params.agentId,
+        tick_id: params.tickId,
+        day: params.day,
+        hour: params.hour,
+        price: decision.price,
+        quality: decision.quality,
+        marketing: decision.marketing,
+        reasoning: decision.reasoning,
+      })
+      .returning({ id: agent_decisions.id });
+
+    // Insert artifact record
+    const [artifactRow] = await tx
+      .insert(simulation_artifacts)
+      .values({
+        simulation_id: params.simulationId,
+        day_id: params.dayId,
+        tick_id: params.tickId,
+        day: params.day,
+        hour: params.hour,
+        agent_id: params.agentId,
+        kind: "agent_turn",
+        schema_version: 1,
+        model_name: params.modelName,
+        prompt_hash: builtPrompt.promptHash,
+        tool_schema_hash: builtPrompt.schemaHash,
+        artifact: payload,
+        is_redacted: isRedacted,
+      })
+      .returning({ id: simulation_artifacts.id });
+
+    return {
+      decisionId: decisionRow.id,
+      artifactId: artifactRow.id,
+    };
+  });
+
+  logAgentTurnOperation({
+    timestamp: new Date().toISOString(),
+    operation: "persistDecision",
+    status: "success",
+    simulationId: params.simulationId,
+    agentId: params.agentId,
+    tickId: params.tickId,
+    day: params.day,
+    hour: params.hour,
+  });
+
+  logAgentTurnOperation({
+    timestamp: new Date().toISOString(),
+    operation: "persistArtifact",
+    status: "success",
+    simulationId: params.simulationId,
+    agentId: params.agentId,
+    tickId: params.tickId,
+    day: params.day,
+    hour: params.hour,
+  });
+
+  return result;
+}
+
+// ========================================
+// Artifact Building
+// ========================================
+
+/**
+ * Build artifact payload based on redaction rules.
+ *
+ * HARD REQUIREMENTS (from CLAUDE.md):
+ * - is_redacted MUST default to true
+ * - Raw prompts/responses ONLY stored when STORE_RAW_LLM_IO=true AND non-production
+ * - Hashes MUST always be stored for provenance
+ */
+function buildArtifactPayload(
+  params: AgentTurnParams,
+  decision: AgentDecision,
+  metadata: AgentTurnMetadata,
+  builtPrompt: BuiltPrompt,
+  error?: string,
+  rawResponse?: unknown
+): { payload: AgentTurnArtifactPayload; isRedacted: boolean } {
+  const now = new Date().toISOString();
+  const startedAt = new Date(Date.now() - metadata.durationMs).toISOString();
+
+  const basePayload: AgentTurnArtifactPayload = {
+    version: 1,
+    agentId: params.agentId,
+    modelName: params.modelName,
+    day: params.day,
+    hour: params.hour,
+    startedAt,
+    finishedAt: now,
+    durationMs: metadata.durationMs,
+    attemptCount: metadata.attemptCount,
+    usedFallback: metadata.usedFallback,
+    decision: {
+      price: decision.price,
+      quality: decision.quality,
+      marketing: decision.marketing,
+      // reasoning intentionally excluded - stored in agent_decisions table
+    },
+    wasCoerced: metadata.wasCoerced,
+    reasoningTruncated: metadata.reasoningTruncated,
+  };
+
+  if (error) {
+    basePayload.error = error;
+  }
+
+  // Check if raw LLM I/O storage is enabled
+  const storeRawIO = process.env.STORE_RAW_LLM_IO === "true";
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (storeRawIO && !isProduction) {
+    // Store raw data - artifact is NOT redacted
+    return {
+      payload: {
+        ...basePayload,
+        rawPrompt: builtPrompt.prompt,
+        rawResponse: rawResponse ? JSON.stringify(rawResponse) : undefined,
+      },
+      isRedacted: false,
+    };
+  }
+
+  // Default: redacted (no raw prompt/response)
+  return {
+    payload: basePayload,
+    isRedacted: true,
+  };
+}
