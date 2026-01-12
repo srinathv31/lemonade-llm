@@ -126,6 +126,8 @@ Each level references the level below via tick_id/day_id foreign keys.
 
 ## Roadmap
 
+> **Progress Tracking:** See [PROGRESS.md](./PROGRESS.md) for the current status checklist.
+
 ### Step 1: Ollama Provider Layer
 
 **Goal:** Create a reusable Ollama client using the Vercel AI SDK.

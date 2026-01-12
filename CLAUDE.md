@@ -17,6 +17,9 @@ This file instructs Claude Code how to work effectively in this repository.
 - No LLM-based customers (prevents gaming)
 - No premature scaling infrastructure
 
+### Progress Tracking
+See [PROGRESS.md](./PROGRESS.md) for the current development status checklist.
+
 ---
 
 ## Tech Stack
