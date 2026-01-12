@@ -12,12 +12,13 @@
   - agent_decisions / customer_events
   - simulation_artifacts (replay + provenance)
 
-## In Progress
-- [ ] Step 3: Agent Decision Schema & Validation
-  - Zod schema for decisions
-  - Parsing + validation helpers
-  - Brief reasoning rules (no chain-of-thought)
+- [x] Step 3: Agent Decision Schema & Validation
+  - Zod schema for decisions (price, quality, marketing, reasoning)
+  - Parsing + validation helpers with coercion
+  - Brief reasoning rules (CoT stripping, 300 char limit)
+  - Provenance hashing (SHA-256 for prompts and schema)
 
+## In Progress
 - [ ] Step 4: Prompt Builder
   - JSON-only prompts
   - Context injection (day, hour, history, competitors)

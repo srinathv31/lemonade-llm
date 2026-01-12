@@ -128,75 +128,82 @@ Each level references the level below via tick_id/day_id foreign keys.
 
 > **Progress Tracking:** See [PROGRESS.md](./PROGRESS.md) for the current status checklist.
 
-### Step 1: Ollama Provider Layer
+### Step 1: Ollama Provider Setup ✅
 
 **Goal:** Create a reusable Ollama client using the Vercel AI SDK.
 
-**Tasks:**
-- [ ] Install `ollama-ai-provider` package
-- [ ] Create `src/lib/ollama/client.ts` with configured provider
-- [ ] Create `src/lib/ollama/models.ts` with model constants
-- [ ] Add health check utility to verify Ollama is running
+**Status:** Complete
 
-**Files to create:**
+**Files created:**
 ```
 src/lib/ollama/
-├── client.ts      # Provider instance
-├── models.ts      # Available model names
+├── client.ts      # Provider instance + health check
+├── schemas.ts     # Zod validation schemas
+├── types.ts       # TypeScript interfaces
 └── index.ts       # Barrel export
 ```
 
-**Definition of Done:**
-- Can call any local Ollama model and receive a response
-- Health check returns model list from Ollama API
-- TypeScript types are correct
+---
+
+### Step 2: Database Schema ✅
+
+**Goal:** Define all database tables for simulation persistence.
+
+**Status:** Complete
+
+**File:** `src/lib/db/drizzle/schema.ts`
+
+**Tables created:**
+- `simulations` - Top-level simulation runs
+- `agents` - AI agents in each simulation
+- `simulation_days` - Per-day seed, env snapshot
+- `simulation_ticks` - Per-tick state
+- `agent_decisions` - Per-tick price/quality/marketing
+- `customer_events` - Demand results
+- `simulation_artifacts` - Immutable replay blobs
 
 ---
 
-### Step 2: Decision JSON Contract
+### Step 3: Agent Decision Schema & Validation ✅
 
 **Goal:** Define the data contract for agent decisions with runtime validation.
 
-**Tasks:**
-- [ ] Create Zod schema for agent decisions
-- [ ] Create parsing helpers with error handling
-- [ ] Add type exports for use throughout codebase
+**Status:** Complete
 
-**Schema structure:**
-```typescript
-const agentDecisionSchema = z.object({
-  price: z.number().min(0.50).max(10.00),
-  quality: z.number().int().min(1).max(10),
-  marketing: z.number().int().min(0).max(100),
-  reasoning: z.string().max(500),
-});
+**Schema bounds:**
+| Field | Type | Range | Default |
+|-------|------|-------|---------|
+| `price` | number | 0.50–10.00 | 2.00 |
+| `quality` | integer | 1–10 | 5 |
+| `marketing` | integer | 0–100 | 50 |
+| `reasoning` | string | max 500 chars | — |
+
+**Files created:**
+```
+src/lib/sim/decisions/
+├── schema.ts       # Zod schemas + constraints
+├── types.ts        # TypeScript interfaces
+├── validation.ts   # Parsing + validation helpers
+├── provenance.ts   # SHA-256 hashing utilities
+└── index.ts        # Barrel export
 ```
 
-**Files to create:**
-```
-src/lib/sim/
-├── schemas/
-│   ├── decision.ts    # Zod schema + types
-│   └── index.ts       # Barrel export
-└── parsers/
-    ├── decision.ts    # Parse + validate helpers
-    └── index.ts
-```
-
-**Definition of Done:**
-- Schema correctly validates price (0.50–10.00), quality (1–10), marketing (0–100)
-- Invalid decisions throw descriptive errors
-- Types are exported and usable
+**Features:**
+- Two-tier validation (strict → lenient with coercion)
+- Chain-of-thought stripping from reasoning
+- Fallback decision generation
+- Provenance hashing for artifacts
 
 ---
 
-### Step 3: Prompt Builder
+### Step 4: Prompt Builder
 
 **Goal:** Create prompt templates that produce valid JSON decisions.
 
 **Tasks:**
 - [ ] Create base prompt template for agent decisions
 - [ ] Add context injection (day, hour, history, competitors)
+- [ ] Implement stable prompt hashing
 - [ ] Test with multiple Ollama models for JSON compliance
 
 **Prompt structure:**
@@ -227,11 +234,12 @@ src/lib/sim/prompts/
 **Definition of Done:**
 - Prompts consistently produce valid JSON from gemma3, llama3, mistral
 - Context is properly injected
+- Prompt hashing works correctly
 - No prompt injection vulnerabilities
 
 ---
 
-### Step 4: Run-Agent-Turn
+### Step 5: Agent Turn Runner
 
 **Goal:** Execute a single agent's decision for one tick.
 
@@ -240,6 +248,7 @@ src/lib/sim/prompts/
 - [ ] Build prompt with current context
 - [ ] Call Ollama and parse response
 - [ ] Insert decision into `agent_decisions` table
+- [ ] Write `agent_turn` artifact (redacted by default)
 - [ ] Handle errors gracefully (retry, fallback)
 
 **Function signature:**
@@ -263,6 +272,7 @@ src/lib/sim/engine/
 **Definition of Done:**
 - Single agent can make one decision
 - Decision is persisted to database
+- `agent_turn` artifact created with provenance hashes
 - Errors are logged with context
 - Fallback to previous decision on failure
 
@@ -287,14 +297,39 @@ src/lib/sim/engine/
 
 ---
 
-### Step 5: Run-Tick
+### Step 6: Timeline Bootstrap (Days & Ticks)
+
+**Goal:** Ensure simulation timeline records exist before running.
+
+**Tasks:**
+- [ ] Create `simulation_day` record with seed and env snapshot
+- [ ] Create `simulation_tick` records for all 8 hours
+- [ ] Implement idempotent bootstrap (safe to re-run)
+
+**Function signature:**
+```typescript
+async function bootstrapDay(params: {
+  simulationId: string;
+  day: number;
+}): Promise<{ dayId: string; tickIds: string[] }>
+```
+
+**Definition of Done:**
+- Day record created with RNG seed
+- 8 tick records created (hours 9-16)
+- Re-running doesn't create duplicates
+
+---
+
+### Step 7: Tick Runner
 
 **Goal:** Execute all agents for a single hourly tick.
 
 **Tasks:**
 - [ ] Load all agents for simulation
 - [ ] Run agent turns (parallel or sequential)
-- [ ] Collect all decisions for the tick
+- [ ] Update tick status
+- [ ] Write `tick` artifact (summary + metadata)
 - [ ] Handle partial failures
 
 **Function signature:**
@@ -316,7 +351,8 @@ src/lib/sim/engine/
 
 **Definition of Done:**
 - All agents execute for one tick
-- Decisions are collected and returned
+- Tick status updated in database
+- `tick` artifact created with references
 - Partial failures don't crash entire tick
 
 #### Artifacts & Provenance
@@ -338,66 +374,16 @@ src/lib/sim/engine/
 
 ---
 
-### Step 6: Run-Day
-
-**Goal:** Execute a full simulated day (8 ticks, 9am–5pm).
-
-**Tasks:**
-- [ ] Implement pre-day setup (weather, random events)
-- [ ] Loop through 8 ticks sequentially
-- [ ] Run customer engine after each tick
-- [ ] Implement post-day summary (totals, rankings)
-
-**Function signature:**
-```typescript
-async function runDay(params: {
-  simulationId: string;
-  dayId: string;
-  day: number;
-}): Promise<DayResult>
-```
-
-**Files to create:**
-```
-src/lib/sim/engine/
-├── day.ts          # Full day loop
-└── ...
-```
-
-**Definition of Done:**
-- Full 8-tick day runs to completion
-- Customer engine runs after agent decisions
-- Day summary is calculated and stored
-
-#### Artifacts & Provenance
-
-**Artifact produced:** `day`
-
-**MUST capture:**
-- `day_id`, `simulation_id`, `day` number
-- RNG `seed` used for this day
-- `env_snapshot` (weather, base demand, market conditions)
-- References to all 8 `tick` artifacts
-- Day summary metrics (total revenue, customer count)
-- Day status and timing
-
-**MUST NOT store:**
-- Embedded tick or agent_turn data (reference only)
-- Raw prompts or responses
-
-**Determinism note:** The seed and env_snapshot enable deterministic replay of the customer engine. LLM decisions are captured in artifacts but cannot be replayed deterministically.
-
----
-
-### Step 7: Customer Engine
+### Step 8: Customer Engine
 
 **Goal:** Rule-based demand calculation based on agent decisions.
 
 **Tasks:**
 - [ ] Define demand formula (price sensitivity, quality bonus, marketing effect)
 - [ ] Add environmental factors (weather, time of day)
-- [ ] Calculate purchases per agent
+- [ ] Calculate purchases per agent (deterministic)
 - [ ] Insert results to `customer_events` table
+- [ ] Attach outcomes to tick replay
 
 **Demand factors:**
 ```typescript
@@ -421,11 +407,97 @@ src/lib/sim/customers/
 **Definition of Done:**
 - Demand is calculated deterministically from inputs
 - Results are inserted to `customer_events`
+- Same inputs always produce same outputs
 - Formula is tunable via configuration
 
 ---
 
-### Step 8: UI Dashboards
+### Step 9: Day Runner
+
+**Goal:** Execute a full simulated day (8 ticks, 9am–5pm).
+
+**Tasks:**
+- [ ] Loop through 8 ticks sequentially
+- [ ] Run customer engine after each tick
+- [ ] Implement post-day aggregation
+- [ ] Write `day` artifact + summary metrics
+
+**Function signature:**
+```typescript
+async function runDay(params: {
+  simulationId: string;
+  dayId: string;
+  day: number;
+}): Promise<DayResult>
+```
+
+**Files to create:**
+```
+src/lib/sim/engine/
+├── day.ts          # Full day loop
+└── ...
+```
+
+**Definition of Done:**
+- Full 8-tick day runs to completion
+- Customer engine runs after agent decisions
+- `day` artifact created with summary
+- Day summary metrics calculated and stored
+
+#### Artifacts & Provenance
+
+**Artifact produced:** `day`
+
+**MUST capture:**
+- `day_id`, `simulation_id`, `day` number
+- RNG `seed` used for this day
+- `env_snapshot` (weather, base demand, market conditions)
+- References to all 8 `tick` artifacts
+- Day summary metrics (total revenue, customer count)
+- Day status and timing
+
+**MUST NOT store:**
+- Embedded tick or agent_turn data (reference only)
+- Raw prompts or responses
+
+**Determinism note:** The seed and env_snapshot enable deterministic replay of the customer engine.
+
+---
+
+### Step 10: Replay Queries
+
+**Goal:** Load simulation artifacts for replay views.
+
+**Tasks:**
+- [ ] Load full simulation replay (all days)
+- [ ] Load per-tick replay (fast drill-down)
+- [ ] Efficient artifact traversal
+
+**Definition of Done:**
+- Can reconstruct full simulation timeline from artifacts
+- Per-tick detail loads quickly
+- Handles missing/incomplete artifacts gracefully
+
+---
+
+### Step 11: Simulation API
+
+**Goal:** API endpoints to orchestrate simulations.
+
+**Tasks:**
+- [ ] Create / configure simulations
+- [ ] Start simulation (trigger day run)
+- [ ] Get simulation status
+- [ ] Server-only orchestration (no client-side LLM calls)
+
+**Definition of Done:**
+- Can create simulations via API
+- Can trigger simulation runs
+- Status accurately reflects progress
+
+---
+
+### Step 12: Dashboard UI
 
 **Goal:** Web interface to run and observe simulations.
 
@@ -683,7 +755,12 @@ pnpm db:migrate
 | File | Purpose |
 |------|---------|
 | `src/lib/db/drizzle/schema.ts` | Database schema |
-| `src/lib/ollama/client.ts` | Ollama provider (create this) |
+| `src/lib/ollama/client.ts` | Ollama provider ✅ |
+| `src/lib/sim/decisions/schema.ts` | Agent decision Zod schema ✅ |
+| `src/lib/sim/decisions/validation.ts` | Decision parsing + validation ✅ |
+| `src/lib/sim/prompts/decision.ts` | Prompt builder (create this) |
+| `src/lib/sim/engine/agent-turn.ts` | Agent turn runner (create this) |
+| `src/lib/sim/engine/tick.ts` | Tick runner (create this) |
 | `src/lib/sim/engine/day.ts` | Day runner (create this) |
 | `src/lib/sim/customers/demand.ts` | Customer engine (create this) |
 

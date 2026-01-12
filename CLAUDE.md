@@ -144,6 +144,7 @@ src/
 │   ├── db/drizzle/         # Database schema and client
 │   ├── ollama/             # Ollama + AI SDK provider wrappers
 │   └── sim/                # Simulation engine
+│       ├── decisions/      # Agent decision schema + validation
 │       ├── prompts/        # Prompt templates
 │       ├── engine/         # Tick/day runners
 │       └── customers/      # Customer demand logic
@@ -309,6 +310,17 @@ const result = await generateObject({
   prompt: buildAgentPrompt(context),
 });
 ```
+
+### Agent Decision Schema
+
+The canonical decision bounds (see `src/lib/sim/decisions/schema.ts`):
+
+| Field | Type | Range | Default |
+|-------|------|-------|---------|
+| `price` | number | 0.50–10.00 | 2.00 |
+| `quality` | integer | 1–10 | 5 |
+| `marketing` | integer | 0–100 | 50 |
+| `reasoning` | string | max 500 chars | — |
 
 ### Error Handling
 - Wrap LLM calls in try/catch
