@@ -18,12 +18,13 @@
   - Brief reasoning rules (CoT stripping, 300 char limit)
   - Provenance hashing (SHA-256 for prompts and schema)
 
-## In Progress
-- [ ] Step 4: Prompt Builder
-  - JSON-only prompts
-  - Context injection (day, hour, history, competitors)
-  - Stable prompt hashing
+- [x] Step 4: Prompt Builder
+  - JSON-only prompts with explicit schema instructions
+  - Context injection (day, hour, environment, history, competitors, market outcomes)
+  - Deterministic prompt construction with stable hashing
+  - Files: `src/lib/sim/prompts/{types,templates,context,builder,index}.ts`
 
+## In Progress
 - [ ] Step 5: Agent Turn Runner
   - Run a single agent for one tick
   - Validation + retries + fallback
