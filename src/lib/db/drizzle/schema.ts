@@ -292,6 +292,13 @@ export const simulation_artifacts = pgTable(
       table.day,
       table.hour
     ),
+    // Unique constraint to prevent duplicate artifacts per tick/agent/kind
+    // This ensures idempotent retries don't create duplicate artifacts
+    uniqueIndex("simulation_artifacts_tick_agent_kind_idx").on(
+      table.tick_id,
+      table.agent_id,
+      table.kind
+    ),
     index("simulation_artifacts_day_id_idx").on(table.day_id),
     index("simulation_artifacts_tick_id_idx").on(table.tick_id),
   ]
