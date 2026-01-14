@@ -493,7 +493,7 @@ async function runSingleAgent(
       artifactId: existing.artifactId,
       decision: existing.decision,
       durationMs: 0,
-      usedFallback: false,
+      usedFallback: existing.usedFallback,
       skipped: true,
     };
   }
@@ -855,6 +855,20 @@ interface ExistingDecisionResult {
   decision: AgentDecision;
   decisionId: string;
   artifactId: string;
+  usedFallback: boolean;
+}
+
+/**
+ * Type guard for agent_turn artifact payload.
+ * Used to safely extract usedFallback from the artifact JSON.
+ */
+function isAgentTurnPayload(payload: unknown): payload is { usedFallback?: boolean } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    (!("usedFallback" in payload) ||
+      typeof (payload as Record<string, unknown>).usedFallback === "boolean")
+  );
 }
 
 /**
@@ -887,9 +901,12 @@ async function fetchExistingDecision(
     return null;
   }
 
-  // Find corresponding agent_turn artifact
+  // Find corresponding agent_turn artifact (including payload for usedFallback)
   const [existingArtifact] = await db
-    .select({ id: simulation_artifacts.id })
+    .select({
+      id: simulation_artifacts.id,
+      artifact: simulation_artifacts.artifact,
+    })
     .from(simulation_artifacts)
     .where(
       and(
@@ -899,6 +916,12 @@ async function fetchExistingDecision(
       )
     )
     .limit(1);
+
+  // Extract usedFallback from artifact payload with type-safe check
+  const usedFallback =
+    existingArtifact && isAgentTurnPayload(existingArtifact.artifact)
+      ? (existingArtifact.artifact.usedFallback ?? false)
+      : false;
 
   return {
     decision: {
@@ -910,6 +933,7 @@ async function fetchExistingDecision(
     decisionId: existingDecision.id,
     // If artifact not found (edge case), use empty string
     artifactId: existingArtifact?.id ?? "",
+    usedFallback,
   };
 }
 
