@@ -418,8 +418,16 @@ async function runAgentsSequentially(
   );
 
   for (const agent of tickAgents) {
-    // Combine previous tick competitors with current tick decisions (from earlier agents)
-    const allCompetitors = [...previousTickCompetitors, ...currentTickDecisions];
+    // Get agent IDs that have already acted in current tick
+    const currentTickAgentIds = new Set(currentTickDecisions.map((c) => c.agentId));
+
+    // Filter out previous tick entries for agents who have current tick decisions
+    const filteredPreviousCompetitors = previousTickCompetitors.filter(
+      (c) => !currentTickAgentIds.has(c.agentId)
+    );
+
+    // Combine: previous tick (for agents not yet acted) + current tick decisions
+    const allCompetitors = [...filteredPreviousCompetitors, ...currentTickDecisions];
 
     const outcome = await runSingleAgent(
       agent,
