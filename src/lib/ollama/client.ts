@@ -1,4 +1,4 @@
-import { ollama } from "ai-sdk-ollama";
+import { createOllama } from "ai-sdk-ollama";
 import { generateText as aiGenerateText } from "ai";
 import type {
   OllamaModelsResponse,
@@ -18,6 +18,13 @@ const DEFAULT_BASE_URL = "http://localhost:11434";
 function getBaseUrl(): string {
   return process.env.OLLAMA_BASE_URL ?? DEFAULT_BASE_URL;
 }
+
+/**
+ * Create Ollama provider with configured base URL
+ */
+const ollama = createOllama({
+  baseURL: getBaseUrl(),
+});
 
 /**
  * Structured logging helper following CLAUDE.md guidelines
