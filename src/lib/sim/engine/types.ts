@@ -275,3 +275,137 @@ export interface ResolveTickSnapshotParams {
   daySeed: number;
   hour: number;
 }
+
+// ========================================
+// Tick Runner Types (Step 7)
+// ========================================
+
+/**
+ * Agent info needed to run a tick.
+ */
+export interface TickAgent {
+  id: string;
+  modelName: string;
+  strategy?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for running a single tick.
+ */
+export interface RunTickParams {
+  simulationId: string;
+  day: number;
+  hour: number;
+  /** Optional: pre-fetched agents (if not provided, will be fetched) */
+  agents?: TickAgent[];
+  /** Optional: simulation config for environment/tick snapshot overrides */
+  config?: SimulationConfig;
+  /** Optional: run agents sequentially instead of in parallel (default: false) */
+  sequential?: boolean;
+}
+
+/**
+ * Individual agent result within a tick.
+ */
+export interface TickAgentOutcome {
+  agentId: string;
+  modelName: string;
+  success: boolean;
+  decisionId: string;
+  artifactId: string;
+  decision: AgentDecision;
+  durationMs: number;
+  usedFallback: boolean;
+  error?: string;
+}
+
+/**
+ * Summary statistics for a tick.
+ */
+export interface TickSummary {
+  totalAgents: number;
+  successfulAgents: number;
+  failedAgents: number;
+  averageDurationMs: number;
+  fallbackCount: number;
+}
+
+/**
+ * Result of running a tick.
+ */
+export interface RunTickResult {
+  tickId: string;
+  dayId: string;
+  day: number;
+  hour: number;
+  status: "completed" | "partial" | "failed";
+  agentOutcomes: TickAgentOutcome[];
+  tickArtifactId: string;
+  durationMs: number;
+  summary: TickSummary;
+  error?: string;
+}
+
+/**
+ * Artifact payload structure for tick kind.
+ * This is what gets stored in simulation_artifacts.artifact JSONB.
+ */
+export interface TickArtifactPayload {
+  version: 1;
+  day: number;
+  hour: number;
+
+  // Timing
+  startedAt: string; // ISO timestamp
+  finishedAt: string; // ISO timestamp
+  durationMs: number;
+
+  // Summary metrics
+  totalAgents: number;
+  successfulAgents: number;
+  failedAgents: number;
+  fallbackCount: number;
+  averageAgentDurationMs: number;
+
+  // Per-agent outcomes (no raw LLM data - that's in agent_turn artifacts)
+  agentOutcomes: Array<{
+    agentId: string;
+    modelName: string;
+    success: boolean;
+    usedFallback: boolean;
+    durationMs: number;
+    decision: {
+      price: number;
+      quality: number;
+      marketing: number;
+    };
+    error?: string;
+  }>;
+
+  // Environment context for replay
+  environment: EnvironmentSnapshot;
+  tickSnapshot: TickSnapshot;
+}
+
+/**
+ * Structured log entry for tick runner operations.
+ * Per CLAUDE.md guidelines: log metadata, not raw prompts/responses.
+ */
+export interface TickRunnerLogEntry {
+  timestamp: string;
+  operation:
+    | "runTick"
+    | "fetchAgents"
+    | "buildContext"
+    | "runAgentTurn"
+    | "persistArtifact";
+  status: "start" | "success" | "error" | "partial";
+  simulationId: string;
+  day: number;
+  hour: number;
+  tickId?: string;
+  agentId?: string;
+  agentCount?: number;
+  duration?: number;
+  error?: string;
+}
