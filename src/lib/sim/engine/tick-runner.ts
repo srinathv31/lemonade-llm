@@ -724,6 +724,7 @@ async function fetchPreviousMarketOutcome(
     .select({
       totalCustomers: sql<number>`COALESCE(SUM(${customer_events.customers_served}), 0)`,
       averagePrice: sql<number>`COALESCE(AVG(${agent_decisions.price}), 0)`,
+      rowCount: sql<number>`COUNT(*)`,
     })
     .from(customer_events)
     .innerJoin(
@@ -759,7 +760,8 @@ async function fetchPreviousMarketOutcome(
       )
     );
 
-  if (!marketData || marketData.totalCustomers === 0) {
+  // Only return undefined if there are no rows (no data), not for zero customers
+  if (!marketData || marketData.rowCount === 0) {
     return undefined;
   }
 
