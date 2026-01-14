@@ -857,11 +857,7 @@ async function persistTickArtifact(
       success: o.success,
       usedFallback: o.usedFallback,
       durationMs: o.durationMs,
-      decision: {
-        price: o.decision.price,
-        quality: o.decision.quality,
-        marketing: o.decision.marketing,
-      },
+      artifactId: o.artifactId, // Reference canonical agent_turn artifact
       error: o.error,
     })),
     environment: envSnapshot,

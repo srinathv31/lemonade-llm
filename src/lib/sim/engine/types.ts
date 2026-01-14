@@ -367,18 +367,14 @@ export interface TickArtifactPayload {
   fallbackCount: number;
   averageAgentDurationMs: number;
 
-  // Per-agent outcomes (no raw LLM data - that's in agent_turn artifacts)
+  // Per-agent outcomes (reference agent_turn artifacts for decision data)
   agentOutcomes: Array<{
     agentId: string;
     modelName: string;
     success: boolean;
     usedFallback: boolean;
     durationMs: number;
-    decision: {
-      price: number;
-      quality: number;
-      marketing: number;
-    };
+    artifactId: string; // Reference to canonical agent_turn artifact
     error?: string;
   }>;
 
