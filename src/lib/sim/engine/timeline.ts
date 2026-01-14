@@ -378,6 +378,7 @@ export async function ensureTick(
 
 /**
  * Update the status of a simulation day.
+ * Clears finished_at when transitioning back to running (retry scenarios).
  */
 export async function updateDayStatus(
   dayId: string,
@@ -388,6 +389,7 @@ export async function updateDayStatus(
 
   if (status === "running") {
     updates.started_at = new Date();
+    updates.finished_at = null; // Clear for retry scenarios
   } else if (status === "completed" || status === "failed") {
     updates.finished_at = new Date();
   }
@@ -400,6 +402,7 @@ export async function updateDayStatus(
 
 /**
  * Update the status of a simulation tick.
+ * Clears finished_at and error when transitioning back to running (retry scenarios).
  */
 export async function updateTickStatus(
   tickId: string,
@@ -410,6 +413,8 @@ export async function updateTickStatus(
 
   if (status === "running") {
     updates.started_at = new Date();
+    updates.finished_at = null; // Clear for retry scenarios
+    updates.error = null;       // Clear previous error
   } else if (status === "completed" || status === "failed") {
     updates.finished_at = new Date();
     if (error) {
