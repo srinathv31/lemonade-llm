@@ -10,7 +10,8 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test:agent-turn": "npx tsx scripts/test-agent-turn.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

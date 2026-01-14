@@ -1,13 +1,9 @@
-import { generateText, Output } from "ai";
+import { generateText } from "ai-sdk-ollama";
 import { ollama } from "../../ollama";
 import db from "../../db/drizzle";
-import {
-  agent_decisions,
-  simulation_artifacts,
-} from "../../db/drizzle/schema";
+import { agent_decisions, simulation_artifacts } from "../../db/drizzle/schema";
 import { buildDecisionPrompt, type BuiltPrompt } from "../prompts";
 import {
-  agentDecisionSchema,
   parseAgentDecision,
   createFallbackDecision,
   type AgentDecision,
@@ -277,23 +273,33 @@ async function attemptLLMCall(
   agentId: string
 ): Promise<LLMAttemptResult> {
   try {
+    // Use structuredOutputs: true to enable Ollama's native JSON mode
     const result = await generateText({
-      model: ollama(modelName),
+      model: ollama(modelName, { structuredOutputs: true }),
       prompt,
-      output: Output.object({
-        schema: agentDecisionSchema,
-      }),
     });
 
-    // generateText with Output.object validates against schema, but we still run through
-    // parseAgentDecision for CoT cleanup and reasoning truncation
-    const parseResult = parseAgentDecision(result.output, agentId);
+    // The LLM returns JSON as text when structuredOutputs is enabled
+    // Parse and validate through parseAgentDecision
+    let rawResponse: unknown;
+    try {
+      rawResponse = JSON.parse(result.text);
+    } catch {
+      return {
+        success: false,
+        error: `Failed to parse LLM response as JSON: ${result.text.slice(0, 100)}...`,
+        wasCoerced: false,
+        reasoningTruncated: false,
+      };
+    }
+
+    const parseResult = parseAgentDecision(rawResponse, agentId);
 
     if (parseResult.success) {
       return {
         success: true,
         decision: parseResult.decision,
-        rawResponse: result.output,
+        rawResponse,
         wasCoerced: parseResult.metadata.wasCoerced,
         reasoningTruncated: parseResult.metadata.reasoningTruncated,
       };
@@ -302,7 +308,7 @@ async function attemptLLMCall(
     return {
       success: false,
       error: parseResult.error,
-      rawResponse: result.output,
+      rawResponse,
       wasCoerced: false,
       reasoningTruncated: false,
     };
@@ -339,8 +345,9 @@ interface PersistTurnDataResult {
 /**
  * Persist decision and artifact to database.
  *
- * Both inserts are wrapped in a transaction to ensure atomicity.
- * If either insert fails, both are rolled back.
+ * Note: Neon HTTP driver doesn't support transactions.
+ * Inserts are performed sequentially. If artifact insert fails,
+ * the decision will still be persisted (acceptable for debugging).
  *
  * Order:
  * 1. INSERT agent_decisions (normalized business state)
@@ -360,49 +367,46 @@ async function persistTurnData(
     rawResponse
   );
 
-  // Wrap both inserts in a transaction for atomicity
-  const result = await db.transaction(async (tx) => {
-    // Insert decision record
-    const [decisionRow] = await tx
-      .insert(agent_decisions)
-      .values({
-        simulation_id: params.simulationId,
-        agent_id: params.agentId,
-        tick_id: params.tickId,
-        day: params.day,
-        hour: params.hour,
-        price: decision.price,
-        quality: decision.quality,
-        marketing: decision.marketing,
-        reasoning: decision.reasoning,
-      })
-      .returning({ id: agent_decisions.id });
+  // Insert decision record
+  const [decisionRow] = await db
+    .insert(agent_decisions)
+    .values({
+      simulation_id: params.simulationId,
+      agent_id: params.agentId,
+      tick_id: params.tickId,
+      day: params.day,
+      hour: params.hour,
+      price: decision.price,
+      quality: decision.quality,
+      marketing: decision.marketing,
+      reasoning: decision.reasoning,
+    })
+    .returning({ id: agent_decisions.id });
 
-    // Insert artifact record
-    const [artifactRow] = await tx
-      .insert(simulation_artifacts)
-      .values({
-        simulation_id: params.simulationId,
-        day_id: params.dayId,
-        tick_id: params.tickId,
-        day: params.day,
-        hour: params.hour,
-        agent_id: params.agentId,
-        kind: "agent_turn",
-        schema_version: 1,
-        model_name: params.modelName,
-        prompt_hash: builtPrompt.promptHash,
-        tool_schema_hash: builtPrompt.schemaHash,
-        artifact: payload,
-        is_redacted: isRedacted,
-      })
-      .returning({ id: simulation_artifacts.id });
+  // Insert artifact record
+  const [artifactRow] = await db
+    .insert(simulation_artifacts)
+    .values({
+      simulation_id: params.simulationId,
+      day_id: params.dayId,
+      tick_id: params.tickId,
+      day: params.day,
+      hour: params.hour,
+      agent_id: params.agentId,
+      kind: "agent_turn",
+      schema_version: 1,
+      model_name: params.modelName,
+      prompt_hash: builtPrompt.promptHash,
+      tool_schema_hash: builtPrompt.schemaHash,
+      artifact: payload,
+      is_redacted: isRedacted,
+    })
+    .returning({ id: simulation_artifacts.id });
 
-    return {
-      decisionId: decisionRow.id,
-      artifactId: artifactRow.id,
-    };
-  });
+  const result = {
+    decisionId: decisionRow.id,
+    artifactId: artifactRow.id,
+  };
 
   logAgentTurnOperation({
     timestamp: new Date().toISOString(),
