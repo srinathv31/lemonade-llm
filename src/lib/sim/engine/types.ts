@@ -1,4 +1,9 @@
-import type { PromptContext, AgentDecision } from "../prompts";
+import type {
+  PromptContext,
+  AgentDecision,
+  EnvironmentSnapshot,
+  TickSnapshot,
+} from "../prompts";
 
 // ========================================
 // Input Parameters
@@ -152,4 +157,121 @@ export interface AgentTurnLogEntry {
   attemptNumber?: number;
   promptHash?: string;
   error?: string;
+}
+
+// ========================================
+// Timeline Types (Step 6)
+// ========================================
+
+/**
+ * Simulation configuration stored in simulations.config JSONB.
+ * Environment and tick snapshots can be overridden here.
+ */
+export interface SimulationConfig {
+  modelName?: string;
+  numDays?: number;
+  environment?: Partial<EnvironmentSnapshot>;
+  tickSnapshots?: Record<number, Partial<TickSnapshot>>;
+}
+
+/**
+ * Status for simulation days.
+ */
+export type DayStatus = "pending" | "running" | "completed" | "failed";
+
+/**
+ * Status for simulation ticks.
+ */
+export type TickStatus = "pending" | "running" | "completed" | "failed";
+
+/**
+ * Database row shape for simulation_days.
+ */
+export interface DayRecord {
+  id: string;
+  simulationId: string;
+  day: number;
+  seed: number | null;
+  envSnapshot: EnvironmentSnapshot | null;
+  status: DayStatus;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Database row shape for simulation_ticks.
+ */
+export interface TickRecord {
+  id: string;
+  simulationId: string;
+  day: number;
+  hour: number;
+  tickSnapshot: TickSnapshot | null;
+  status: TickStatus;
+  error: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Parameters for ensuring a day record exists.
+ */
+export interface EnsureDayParams {
+  simulationId: string;
+  day: number;
+  seed?: number;
+  config?: SimulationConfig;
+}
+
+/**
+ * Result from ensuring a day record.
+ */
+export interface EnsureDayResult {
+  dayId: string;
+  day: number;
+  seed: number;
+  envSnapshot: EnvironmentSnapshot;
+  wasCreated: boolean;
+}
+
+/**
+ * Parameters for ensuring a tick record exists.
+ */
+export interface EnsureTickParams {
+  simulationId: string;
+  dayId: string;
+  day: number;
+  hour: number;
+  daySeed: number;
+  config?: SimulationConfig;
+}
+
+/**
+ * Result from ensuring a tick record.
+ */
+export interface EnsureTickResult {
+  tickId: string;
+  day: number;
+  hour: number;
+  tickSnapshot: TickSnapshot;
+  wasCreated: boolean;
+}
+
+/**
+ * Parameters for resolving environment snapshot.
+ */
+export interface ResolveEnvironmentParams {
+  config?: SimulationConfig;
+  seed: number;
+}
+
+/**
+ * Parameters for resolving tick snapshot.
+ */
+export interface ResolveTickSnapshotParams {
+  config?: SimulationConfig;
+  daySeed: number;
+  hour: number;
 }
