@@ -387,7 +387,9 @@ async function persistTurnData(
 
   // Handle case where insert was skipped due to conflict (race condition)
   let decisionId: string;
-  if (insertResult.length === 0) {
+  const decisionConflict = insertResult.length === 0;
+
+  if (decisionConflict) {
     // Conflict occurred - fetch existing decision ID
     const [existingDecision] = await db
       .select({ id: agent_decisions.id })
@@ -410,6 +412,48 @@ async function persistTurnData(
     logAgentTurnOperation({
       timestamp: new Date().toISOString(),
       operation: "persistDecision",
+      status: "conflict_resolved",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+    });
+
+    // Decision conflict means artifact should already exist - fetch it
+    const [existingArtifact] = await db
+      .select({ id: simulation_artifacts.id })
+      .from(simulation_artifacts)
+      .where(
+        and(
+          eq(simulation_artifacts.tick_id, params.tickId),
+          eq(simulation_artifacts.agent_id, params.agentId),
+          eq(simulation_artifacts.kind, "agent_turn")
+        )
+      )
+      .limit(1);
+
+    if (existingArtifact) {
+      logAgentTurnOperation({
+        timestamp: new Date().toISOString(),
+        operation: "persistArtifact",
+        status: "conflict_resolved",
+        simulationId: params.simulationId,
+        agentId: params.agentId,
+        tickId: params.tickId,
+        day: params.day,
+        hour: params.hour,
+      });
+
+      return { decisionId, artifactId: existingArtifact.id };
+    }
+    // If no artifact exists (edge case: decision inserted, artifact failed), fall through to insert
+  } else {
+    decisionId = insertResult[0].id;
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistDecision",
       status: "success",
       simulationId: params.simulationId,
       agentId: params.agentId,
@@ -417,12 +461,10 @@ async function persistTurnData(
       day: params.day,
       hour: params.hour,
     });
-  } else {
-    decisionId = insertResult[0].id;
   }
 
-  // Insert artifact record
-  const [artifactRow] = await db
+  // Insert artifact record (with conflict handling for race conditions)
+  const artifactInsertResult = await db
     .insert(simulation_artifacts)
     .values({
       simulation_id: params.simulationId,
@@ -439,18 +481,47 @@ async function persistTurnData(
       artifact: payload,
       is_redacted: isRedacted,
     })
+    .onConflictDoNothing() // Safety net for race conditions (unique constraint on tick_id, agent_id, kind)
     .returning({ id: simulation_artifacts.id });
 
-  const result = {
-    decisionId,
-    artifactId: artifactRow.id,
-  };
+  let artifactId: string;
+  if (artifactInsertResult.length === 0) {
+    // Conflict occurred - fetch existing artifact ID
+    const [existingArtifact] = await db
+      .select({ id: simulation_artifacts.id })
+      .from(simulation_artifacts)
+      .where(
+        and(
+          eq(simulation_artifacts.tick_id, params.tickId),
+          eq(simulation_artifacts.agent_id, params.agentId),
+          eq(simulation_artifacts.kind, "agent_turn")
+        )
+      )
+      .limit(1);
 
-  // Only log if we didn't already log in the conflict branch
-  if (insertResult.length > 0) {
+    if (!existingArtifact) {
+      throw new Error(
+        "Artifact insert conflict but no existing artifact found - this should not happen"
+      );
+    }
+    artifactId = existingArtifact.id;
+
     logAgentTurnOperation({
       timestamp: new Date().toISOString(),
-      operation: "persistDecision",
+      operation: "persistArtifact",
+      status: "conflict_resolved",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+    });
+  } else {
+    artifactId = artifactInsertResult[0].id;
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistArtifact",
       status: "success",
       simulationId: params.simulationId,
       agentId: params.agentId,
@@ -460,18 +531,7 @@ async function persistTurnData(
     });
   }
 
-  logAgentTurnOperation({
-    timestamp: new Date().toISOString(),
-    operation: "persistArtifact",
-    status: "success",
-    simulationId: params.simulationId,
-    agentId: params.agentId,
-    tickId: params.tickId,
-    day: params.day,
-    hour: params.hour,
-  });
-
-  return result;
+  return { decisionId, artifactId };
 }
 
 // ========================================

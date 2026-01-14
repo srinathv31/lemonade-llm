@@ -146,7 +146,7 @@ export interface AgentTurnLogEntry {
     | "llmAttempt"
     | "persistDecision"
     | "persistArtifact";
-  status: "start" | "success" | "error" | "retry" | "fallback";
+  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved";
   simulationId: string;
   agentId: string;
   tickId: string;
