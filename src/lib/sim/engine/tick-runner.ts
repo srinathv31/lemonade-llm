@@ -470,6 +470,34 @@ async function runSingleAgent(
   tickSnapshot: TickSnapshot,
   competitorDecisions: CompetitorDecision[]
 ): Promise<TickAgentOutcome> {
+  // Check for existing decision (idempotent retry support)
+  const existing = await fetchExistingDecision(tickId, agent.id);
+  if (existing) {
+    logTickOperation({
+      timestamp: new Date().toISOString(),
+      operation: "runAgentTurn",
+      status: "skipped",
+      simulationId,
+      day,
+      hour,
+      tickId,
+      agentId: agent.id,
+      reason: "existing_decision",
+    });
+
+    return {
+      agentId: agent.id,
+      modelName: agent.modelName,
+      success: true,
+      decisionId: existing.decisionId,
+      artifactId: existing.artifactId,
+      decision: existing.decision,
+      durationMs: 0,
+      usedFallback: false,
+      skipped: true,
+    };
+  }
+
   logTickOperation({
     timestamp: new Date().toISOString(),
     operation: "buildContext",
@@ -817,6 +845,71 @@ async function fetchPreviousDecision(
     quality: row.quality ?? 5,
     marketing: row.marketing ?? 50,
     reasoning: row.reasoning ?? "",
+  };
+}
+
+/**
+ * Existing decision result for idempotent retry support.
+ */
+interface ExistingDecisionResult {
+  decision: AgentDecision;
+  decisionId: string;
+  artifactId: string;
+}
+
+/**
+ * Check if agent already has a decision for this tick.
+ * Used for idempotent retry support - if decision exists, skip LLM call.
+ */
+async function fetchExistingDecision(
+  tickId: string,
+  agentId: string
+): Promise<ExistingDecisionResult | null> {
+  // Check for existing decision
+  const [existingDecision] = await db
+    .select({
+      id: agent_decisions.id,
+      price: agent_decisions.price,
+      quality: agent_decisions.quality,
+      marketing: agent_decisions.marketing,
+      reasoning: agent_decisions.reasoning,
+    })
+    .from(agent_decisions)
+    .where(
+      and(
+        eq(agent_decisions.tick_id, tickId),
+        eq(agent_decisions.agent_id, agentId)
+      )
+    )
+    .limit(1);
+
+  if (!existingDecision) {
+    return null;
+  }
+
+  // Find corresponding agent_turn artifact
+  const [existingArtifact] = await db
+    .select({ id: simulation_artifacts.id })
+    .from(simulation_artifacts)
+    .where(
+      and(
+        eq(simulation_artifacts.tick_id, tickId),
+        eq(simulation_artifacts.agent_id, agentId),
+        eq(simulation_artifacts.kind, "agent_turn")
+      )
+    )
+    .limit(1);
+
+  return {
+    decision: {
+      price: existingDecision.price,
+      quality: existingDecision.quality ?? 5,
+      marketing: existingDecision.marketing ?? 50,
+      reasoning: existingDecision.reasoning ?? "",
+    },
+    decisionId: existingDecision.id,
+    // If artifact not found (edge case), use empty string
+    artifactId: existingArtifact?.id ?? "",
   };
 }
 

@@ -1,4 +1,5 @@
 import { generateText } from "ai-sdk-ollama";
+import { eq, and } from "drizzle-orm";
 import { ollama } from "../../ollama";
 import db from "../../db/drizzle";
 import { agent_decisions, simulation_artifacts } from "../../db/drizzle/schema";
@@ -367,8 +368,8 @@ async function persistTurnData(
     rawResponse
   );
 
-  // Insert decision record
-  const [decisionRow] = await db
+  // Insert decision record (with conflict handling for idempotent retries)
+  const insertResult = await db
     .insert(agent_decisions)
     .values({
       simulation_id: params.simulationId,
@@ -381,7 +382,44 @@ async function persistTurnData(
       marketing: decision.marketing,
       reasoning: decision.reasoning,
     })
+    .onConflictDoNothing() // Safety net for race conditions
     .returning({ id: agent_decisions.id });
+
+  // Handle case where insert was skipped due to conflict (race condition)
+  let decisionId: string;
+  if (insertResult.length === 0) {
+    // Conflict occurred - fetch existing decision ID
+    const [existingDecision] = await db
+      .select({ id: agent_decisions.id })
+      .from(agent_decisions)
+      .where(
+        and(
+          eq(agent_decisions.tick_id, params.tickId),
+          eq(agent_decisions.agent_id, params.agentId)
+        )
+      )
+      .limit(1);
+
+    if (!existingDecision) {
+      throw new Error(
+        "Decision insert conflict but no existing decision found - this should not happen"
+      );
+    }
+    decisionId = existingDecision.id;
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistDecision",
+      status: "success",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+    });
+  } else {
+    decisionId = insertResult[0].id;
+  }
 
   // Insert artifact record
   const [artifactRow] = await db
@@ -404,20 +442,23 @@ async function persistTurnData(
     .returning({ id: simulation_artifacts.id });
 
   const result = {
-    decisionId: decisionRow.id,
+    decisionId,
     artifactId: artifactRow.id,
   };
 
-  logAgentTurnOperation({
-    timestamp: new Date().toISOString(),
-    operation: "persistDecision",
-    status: "success",
-    simulationId: params.simulationId,
-    agentId: params.agentId,
-    tickId: params.tickId,
-    day: params.day,
-    hour: params.hour,
-  });
+  // Only log if we didn't already log in the conflict branch
+  if (insertResult.length > 0) {
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistDecision",
+      status: "success",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+    });
+  }
 
   logAgentTurnOperation({
     timestamp: new Date().toISOString(),

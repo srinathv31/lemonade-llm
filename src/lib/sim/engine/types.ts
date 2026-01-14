@@ -316,6 +316,8 @@ export interface TickAgentOutcome {
   decision: AgentDecision;
   durationMs: number;
   usedFallback: boolean;
+  /** True if agent was skipped due to existing decision (idempotent retry) */
+  skipped?: boolean;
   error?: string;
 }
 
@@ -395,7 +397,7 @@ export interface TickRunnerLogEntry {
     | "buildContext"
     | "runAgentTurn"
     | "persistArtifact";
-  status: "start" | "success" | "error" | "partial";
+  status: "start" | "success" | "error" | "partial" | "skipped";
   simulationId: string;
   day: number;
   hour: number;
@@ -404,4 +406,6 @@ export interface TickRunnerLogEntry {
   agentCount?: number;
   duration?: number;
   error?: string;
+  /** Reason for skipping (when status is "skipped") */
+  reason?: string;
 }
