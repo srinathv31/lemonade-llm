@@ -195,28 +195,65 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
 
   // Step 4: Run agents
   let agentOutcomes: TickAgentOutcome[];
-  if (sequential) {
-    agentOutcomes = await runAgentsSequentially(
-      tickAgents,
+  try {
+    if (sequential) {
+      agentOutcomes = await runAgentsSequentially(
+        tickAgents,
+        simulationId,
+        dayId,
+        tickId,
+        day,
+        hour,
+        envSnapshot,
+        tickSnapshot
+      );
+    } else {
+      agentOutcomes = await runAgentsInParallel(
+        tickAgents,
+        simulationId,
+        dayId,
+        tickId,
+        day,
+        hour,
+        envSnapshot,
+        tickSnapshot
+      );
+    }
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Agent execution failed";
+
+    logTickOperation({
+      timestamp: new Date().toISOString(),
+      operation: "runTick",
+      status: "error",
       simulationId,
-      dayId,
-      tickId,
       day,
       hour,
-      envSnapshot,
-      tickSnapshot
-    );
-  } else {
-    agentOutcomes = await runAgentsInParallel(
-      tickAgents,
-      simulationId,
-      dayId,
       tickId,
+      error: errorMessage,
+    });
+
+    await updateTickStatus(tickId, "failed", errorMessage);
+
+    return {
+      tickId,
+      dayId,
       day,
       hour,
-      envSnapshot,
-      tickSnapshot
-    );
+      status: "failed",
+      agentOutcomes: [],
+      tickArtifactId: "",
+      durationMs: Date.now() - startTime,
+      summary: {
+        totalAgents: tickAgents.length,
+        successfulAgents: 0,
+        failedAgents: tickAgents.length,
+        averageDurationMs: 0,
+        fallbackCount: 0,
+      },
+      error: `Agent execution failed: ${errorMessage}`,
+    };
   }
 
   // Step 5: Calculate summary
