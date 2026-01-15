@@ -193,25 +193,25 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Page Structure
 
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/page.tsx` (RSC)
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/page.tsx` (RSC)
   - Fetch with `loadTickReplay(tickId)`
   - Display environment, decisions, outcomes
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/loading.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/loading.tsx`
   - Skeleton for header, decision grid, outcome grid
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/error.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/ticks/[tickId]/error.tsx`
   - Error alert with back to day link
 
 ### Components
 
-- [ ] `src/components/replay/tick-detail.tsx`
+- [x] `src/components/replay/tick-detail.tsx`
   - Hour display (e.g., "Hour 9 (9:00 AM)")
   - Tick status and duration
   - Environment snapshot
-- [ ] `src/components/replay/tick-navigation.tsx` (client)
+- [x] `src/components/replay/tick-navigation.tsx` (client)
   - Previous/Next tick buttons
   - Keyboard navigation (arrow keys)
   - Disable at boundaries (hour 9/16)
-- [ ] `src/components/replay/agent-decision-card.tsx`
+- [x] `src/components/replay/agent-decision-card.tsx`
   - Agent model name
   - Price (formatted as currency)
   - Quality (1-10 scale with visual indicator)
@@ -219,13 +219,13 @@ Step 12 of the Lemonade Stand Simulation project.
   - Reasoning text (collapsible if long)
   - Fallback indicator if used
   - LLM call duration
-- [ ] `src/components/replay/agent-outcome-card.tsx`
+- [x] `src/components/replay/agent-outcome-card.tsx`
   - Customers served count
   - Sales volume
   - Revenue (formatted as currency)
   - Market share percentage
   - Comparison to previous tick (delta indicators)
-- [ ] `src/components/replay/demand-factors-card.tsx`
+- [x] `src/components/replay/demand-factors-card.tsx`
   - Collapsible detailed breakdown
   - Input factors: baseDemand, weather, event
   - Calculated scores: price, quality, marketing
@@ -237,10 +237,10 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ## Shared UI Components (if not in shadcn)
 
-- [ ] `src/components/ui/skeleton.tsx` - Loading placeholder
-- [ ] `src/components/ui/empty-state.tsx` - Empty list placeholder
-- [ ] Currency formatter utility
-- [ ] Date/time formatter utility
+- [x] `src/components/ui/skeleton.tsx` - Loading placeholder (shadcn)
+- [x] `src/components/ui/empty-state.tsx` - Empty list placeholder (custom)
+- [x] Currency formatter utility (`src/lib/utils.ts`)
+- [x] Date/time formatter utility (`src/lib/utils.ts`)
 
 ---
 

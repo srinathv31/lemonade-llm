@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency, formatHour } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
@@ -28,21 +28,6 @@ const statusBgColors: Record<TickSummaryEntry["status"], string> = {
   partial: "bg-yellow-100 dark:bg-yellow-900/30",
   failed: "bg-red-100 dark:bg-red-900/30",
 };
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatHour(hour: number): string {
-  const displayHour = hour + 9; // Convert 0-7 to 9-16
-  if (displayHour === 12) return "12 PM";
-  if (displayHour < 12) return `${displayHour} AM`;
-  return `${displayHour - 12} PM`;
-}
 
 export function TickTimeline({
   ticks,
