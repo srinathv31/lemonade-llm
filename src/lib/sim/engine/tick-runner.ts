@@ -262,15 +262,58 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
   // Step 5: Calculate summary
   const summary = calculateSummary(agentOutcomes);
 
+  // Step 5.5: Check for integrity issues (missing artifacts)
+  const missingArtifacts = agentOutcomes.filter((o) => o.artifactId === "");
+  const hasIntegrityIssue = missingArtifacts.length > 0;
+
   // Step 6: Determine status
   let status: "completed" | "partial" | "failed";
   let errorMessage: string | undefined;
 
-  if (summary.failedAgents === 0) {
+  if (summary.successfulAgents === 0) {
+    // All agents failed - "failed" takes precedence over integrity issues
+    status = "failed";
+    const parts: string[] = [`All ${summary.totalAgents} agents failed`];
+    if (hasIntegrityIssue) {
+      parts.push(
+        `${missingArtifacts.length} agent(s) missing artifacts (integrity issue)`
+      );
+    }
+    errorMessage = parts.join("; ");
+  } else if (hasIntegrityIssue) {
+    // Some agents succeeded but have integrity issues - partial
+    status = "partial";
+    const parts: string[] = [];
+    // Count agent failures that aren't just missing artifacts
+    const pureFailures = agentOutcomes.filter(
+      (o) => !o.success && o.artifactId !== ""
+    ).length;
+    if (pureFailures > 0) {
+      parts.push(`${pureFailures} agent(s) failed`);
+    }
+    parts.push(
+      `${missingArtifacts.length} agent(s) missing artifacts (integrity issue)`
+    );
+    errorMessage = parts.join("; ");
+  } else if (summary.failedAgents === 0) {
     status = "completed";
   } else if (summary.successfulAgents > 0) {
     status = "partial";
-    errorMessage = `${summary.failedAgents} of ${summary.totalAgents} agents used fallback decisions`;
+    const fallbackFailures = agentOutcomes.filter(
+      (o) => !o.success && o.usedFallback
+    ).length;
+    const nonFallbackFailures = summary.failedAgents - fallbackFailures;
+    const parts: string[] = [];
+    if (nonFallbackFailures > 0) {
+      parts.push(`${nonFallbackFailures} agents failed`);
+    }
+    if (fallbackFailures > 0) {
+      parts.push(`${fallbackFailures} agents used fallback decisions`);
+    }
+    errorMessage =
+      parts.length > 0
+        ? parts.join("; ")
+        : `${summary.failedAgents} of ${summary.totalAgents} agents failed`;
   } else {
     status = "failed";
     errorMessage = `All ${summary.totalAgents} agents failed`;
@@ -1198,6 +1241,13 @@ async function persistTickArtifact(
     envSnapshot,
     tickSnapshot,
   } = params;
+
+  const missingArtifactRefs = agentOutcomes.filter((o) => o.artifactId === "");
+  if (missingArtifactRefs.length > 0) {
+    throw new Error(
+      `Cannot persist tick artifact with ${missingArtifactRefs.length} missing agent_turn artifacts`
+    );
+  }
 
   const startedAt = new Date(startTime).toISOString();
   const finishedAt = new Date(startTime + durationMs).toISOString();

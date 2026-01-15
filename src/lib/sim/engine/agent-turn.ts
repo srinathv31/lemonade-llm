@@ -520,7 +520,13 @@ async function persistTurnData(
         )
         .limit(1);
 
-      return { decisionId, artifactId: existingArtifact?.id ?? "" };
+      if (!existingArtifact) {
+        throw new Error(
+          "Regenerated artifact insert conflict but no existing artifact found"
+        );
+      }
+
+      return { decisionId, artifactId: existingArtifact.id };
     }
 
     logAgentTurnOperation({
