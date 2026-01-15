@@ -142,31 +142,31 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Page Structure
 
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/page.tsx` (RSC)
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/page.tsx` (RSC)
   - Fetch with `loadDayReplay(dayId)`
   - Display environment, timeline, summaries
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/loading.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/loading.tsx`
   - Skeleton for overview, timeline, agent cards
-- [ ] `src/app/(dashboard)/simulations/[id]/days/[dayId]/error.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/days/[dayId]/error.tsx`
   - Error alert with back to simulation link
 
 ### Components
 
-- [ ] `src/components/replay/day-overview.tsx`
+- [x] `src/components/replay/day-overview.tsx`
   - Day number, status, duration
   - Date/time range
-- [ ] `src/components/replay/environment-card.tsx`
+- [x] `src/components/replay/environment-card.tsx`
   - Weather icon + label
   - Temperature display
   - Base demand number
   - Special event (if any)
-- [ ] `src/components/replay/tick-timeline.tsx` (client)
+- [x] `src/components/replay/tick-timeline.tsx` (client)
   - Horizontal 8-hour timeline (9am-5pm)
   - Status-colored tick indicators
   - Clickable to navigate to tick detail
   - Highlight current/selected tick
   - Tooltip with tick summary on hover
-- [ ] `src/components/replay/agent-daily-summary.tsx`
+- [x] `src/components/replay/agent-daily-summary.tsx`
   - Card per agent
   - Model name, total revenue, customers served
   - Average price/quality/marketing
@@ -175,17 +175,15 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Charts
 
-- [ ] `src/components/charts/revenue-chart.tsx` (client)
-  - Multi-line chart (one line per agent)
+- [x] `src/components/charts/revenue-chart.tsx` (client)
+  - Single line chart showing hourly total revenue
   - X-axis: Hour (9-16)
   - Y-axis: Revenue ($)
   - Uses ChartContainer + ChartConfig from shadcn
-  - Tooltip with agent names and values
-  - Legend showing agent colors
-- [ ] `src/components/charts/market-share-chart.tsx` (client)
+  - Tooltip with revenue values
+- [x] `src/components/charts/market-share-chart.tsx` (client)
   - Donut chart
   - Shows market share distribution per agent
-  - Can toggle between tick or day aggregate
   - Center text: total customers
   - Tooltip with percentage and customer count
 
