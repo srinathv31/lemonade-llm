@@ -1,6 +1,6 @@
 import db from "../../db/drizzle";
 import { customer_events } from "../../db/drizzle/schema";
-import type { EnvironmentSnapshot, TickSnapshot, AgentDecision } from "../prompts";
+import type { EnvironmentSnapshot } from "../prompts";
 import type {
   CustomerEngineInput,
   CustomerEngineOutput,
@@ -71,27 +71,32 @@ export async function runCustomerEngine(
       );
 
     // Build outcomes with demand factors
-    const agentOutcomes: AgentCustomerOutcome[] = allocations.map((allocation) => {
-      const demandFactors = buildDemandFactors(
-        allocation,
-        input.envSnapshot,
-        input.tickSnapshot,
-        totalDemand,
-        totalMarketScore,
-        weatherMod,
-        eventMod
-      );
+    const agentOutcomes: AgentCustomerOutcome[] = allocations.map(
+      (allocation) => {
+        const demandFactors = buildDemandFactors(
+          allocation,
+          input.envSnapshot,
+          input.tickSnapshot,
+          totalDemand,
+          totalMarketScore,
+          weatherMod,
+          eventMod
+        );
 
-      return {
-        agentId: allocation.agentId,
-        customersServed: allocation.customers,
-        salesVolume: allocation.customers, // 1 cup per customer
-        revenue: roundToDecimals(allocation.customers * allocation.decision.price, 2),
-        marketShare: allocation.marketShare,
-        demandFactors,
-        customerEventId: "", // Will be filled after persistence
-      };
-    });
+        return {
+          agentId: allocation.agentId,
+          customersServed: allocation.customers,
+          salesVolume: allocation.customers, // 1 cup per customer
+          revenue: roundToDecimals(
+            allocation.customers * allocation.decision.price,
+            2
+          ),
+          marketShare: allocation.marketShare,
+          demandFactors,
+          customerEventId: "", // Will be filled after persistence
+        };
+      }
+    );
 
     // Persist to database
     const eventIds = await persistCustomerEvents(agentOutcomes, {
@@ -131,7 +136,8 @@ export async function runCustomerEngine(
     };
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
 
     logCustomerEngineOperation({
       timestamp: new Date().toISOString(),

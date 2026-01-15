@@ -3,7 +3,6 @@ import db from "../../db/drizzle";
 import { simulation_days, simulation_ticks } from "../../db/drizzle/schema";
 import type { EnvironmentSnapshot, TickSnapshot } from "../prompts";
 import type {
-  SimulationConfig,
   DayStatus,
   TickStatus,
   EnsureDayParams,
@@ -217,8 +216,7 @@ function generateTickSnapshotFromSeed(
 
   // Get hour-based demand pattern
   const pattern = HOUR_DEMAND_PATTERNS[hour] ?? { min: 0.8, max: 1.2 };
-  const demandMultiplier =
-    pattern.min + rng() * (pattern.max - pattern.min);
+  const demandMultiplier = pattern.min + rng() * (pattern.max - pattern.min);
 
   // Round to 2 decimal places
   const roundedMultiplier = Math.round(demandMultiplier * 100) / 100;
@@ -383,7 +381,7 @@ export async function ensureTick(
 export async function updateDayStatus(
   dayId: string,
   status: DayStatus,
-  error?: string
+  _error?: string
 ): Promise<void> {
   const updates: Record<string, unknown> = { status };
 
@@ -414,8 +412,12 @@ export async function updateTickStatus(
   if (status === "running") {
     updates.started_at = new Date();
     updates.finished_at = null; // Clear for retry scenarios
-    updates.error = null;       // Clear previous error
-  } else if (status === "completed" || status === "partial" || status === "failed") {
+    updates.error = null; // Clear previous error
+  } else if (
+    status === "completed" ||
+    status === "partial" ||
+    status === "failed"
+  ) {
     updates.finished_at = new Date();
     if (error) {
       updates.error = error;
