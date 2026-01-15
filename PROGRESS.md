@@ -61,16 +61,22 @@
   - Persists summary metrics to `simulation_metrics` table
   - Files: `src/lib/sim/engine/day-runner/{run-day,aggregation,artifact,metrics,utils,index}.ts`
 
+- [x] Step 10: Replay Queries
+  - `loadDayReplay(dayId)` - Day overview with tick summaries
+  - `loadTickReplay(tickId)` - Full tick details with agent decisions and outcomes
+  - Result types with discriminated unions for success/error
+  - Files: `src/lib/sim/replay/{types,queries,errors,index}.ts`
+
+- [x] Step 11: Simulation API
+  - Full CRUD: create, list, get, delete simulations
+  - Run endpoints: `run-day` (single day) and `run` (full simulation)
+  - Blocking execution with status management (pending/running/completed/partial/failed)
+  - Atomic run lock to prevent concurrent runs
+  - Persists `run_summary` artifact with agent rankings and winner
+  - Files: `src/app/api/simulations/{schemas,errors,utils}.ts`
+  - Routes: `create/`, `list/`, `[id]/`, `[id]/run-day/`, `[id]/run/`
+
 ## In Progress
-
-- [ ] Step 10: Replay Queries
-  - Load full simulation replay
-  - Load per-tick replay (fast drill-down)
-
-- [ ] Step 11: Simulation API
-  - Create / start simulations
-  - Trigger day or full run
-  - Server-only orchestration
 
 - [ ] Step 12: Dashboard UI
   - Simulation list + detail
