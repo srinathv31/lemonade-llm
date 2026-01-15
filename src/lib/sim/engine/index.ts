@@ -11,6 +11,9 @@ export {
   resolveTickSnapshot,
 } from "./timeline";
 
+// Tick Runner (Step 7)
+export { runTick } from "./tick-runner";
+
 // Types
 export type {
   // Agent Turn Types
@@ -33,4 +36,12 @@ export type {
   EnsureTickResult,
   ResolveEnvironmentParams,
   ResolveTickSnapshotParams,
+  // Tick Runner Types (Step 7)
+  TickAgent,
+  RunTickParams,
+  RunTickResult,
+  TickAgentOutcome,
+  TickSummary,
+  TickArtifactPayload,
+  TickRunnerLogEntry,
 } from "./types";

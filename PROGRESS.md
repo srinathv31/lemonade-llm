@@ -32,15 +32,20 @@
   - Artifacts redacted by default (raw I/O only with `STORE_RAW_LLM_IO=true` in non-prod)
   - Files: `src/lib/sim/engine/{types,agent-turn,index}.ts`
 
-## In Progress
-- [ ] Step 6: Timeline Bootstrap (Days & Ticks)
-  - Ensure simulation_day exists (seed, env snapshot)
-  - Ensure simulation_tick exists (tick snapshot, status)
+- [x] Step 6: Timeline Bootstrap (Days & Ticks)
+  - `ensureDay()` / `ensureTick()` with idempotent INSERT...ON CONFLICT
+  - Deterministic RNG (Mulberry32) for seeded environment/tick generation
+  - `updateDayStatus()` / `updateTickStatus()` with retry support
+  - Files: `src/lib/sim/engine/timeline.ts`
 
-- [ ] Step 7: Tick Runner
-  - Run all agents for one tick
-  - Update tick status
-  - Write tick artifact (summary + metadata)
+- [x] Step 7: Tick Runner
+  - `runTick()` orchestrates all agents for one tick
+  - Parallel execution (default) or sequential via config
+  - Fetches agent history, competitor decisions, market outcomes
+  - Writes tick artifact (kind: "tick", always redacted)
+  - Files: `src/lib/sim/engine/tick-runner.ts`
+
+## In Progress
 
 - [ ] Step 8: Customer Engine
   - Deterministic demand calculation

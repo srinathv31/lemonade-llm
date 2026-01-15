@@ -175,7 +175,7 @@ export const simulation_days = pgTable(
     seed: integer("seed"), // RNG seed for deterministic replay
     env_snapshot: jsonb("env_snapshot"), // weather baseline, demand params, etc.
 
-    status: text("status").notNull().default("pending"), // pending|running|completed|failed
+    status: text("status").notNull().default("pending"), // pending|running|completed|partial|failed
     started_at: timestamp("started_at", { withTimezone: true }),
     finished_at: timestamp("finished_at", { withTimezone: true }),
 
@@ -210,7 +210,7 @@ export const simulation_ticks = pgTable(
     // Optional tick-level env snapshot
     tick_snapshot: jsonb("tick_snapshot"), // e.g., weather change, events
 
-    status: text("status").notNull().default("pending"), // pending|running|completed|failed
+    status: text("status").notNull().default("pending"), // pending|running|completed|partial|failed
     error: text("error"),
 
     started_at: timestamp("started_at", { withTimezone: true }),
@@ -291,6 +291,13 @@ export const simulation_artifacts = pgTable(
       table.agent_id,
       table.day,
       table.hour
+    ),
+    // Unique constraint to prevent duplicate artifacts per tick/agent/kind
+    // This ensures idempotent retries don't create duplicate artifacts
+    uniqueIndex("simulation_artifacts_tick_agent_kind_idx").on(
+      table.tick_id,
+      table.agent_id,
+      table.kind
     ),
     index("simulation_artifacts_day_id_idx").on(table.day_id),
     index("simulation_artifacts_tick_id_idx").on(table.tick_id),

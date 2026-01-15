@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "simulation_artifacts_tick_agent_kind_idx" ON "simulation_artifacts" USING btree ("tick_id","agent_id","kind");

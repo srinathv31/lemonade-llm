@@ -93,6 +93,9 @@ export interface LLMAttemptResult {
 /**
  * Artifact payload structure for agent_turn kind.
  * This is what gets stored in simulation_artifacts.artifact JSONB.
+ *
+ * Note: Some fields are optional to support regenerated artifacts where
+ * original metadata was lost. Check `wasRegenerated` to identify these.
  */
 export interface AgentTurnArtifactPayload {
   // Always present (even when redacted)
@@ -102,14 +105,14 @@ export interface AgentTurnArtifactPayload {
   day: number;
   hour: number;
 
-  // Timing
+  // Timing (optional for regenerated artifacts)
   startedAt: string; // ISO timestamp
   finishedAt: string; // ISO timestamp
-  durationMs: number;
+  durationMs?: number; // undefined if regenerated
 
-  // Attempt tracking
-  attemptCount: number;
-  usedFallback: boolean;
+  // Attempt tracking (optional for regenerated artifacts)
+  attemptCount?: number; // undefined if regenerated
+  usedFallback?: boolean; // undefined if regenerated
 
   // Decision outcome (always present)
   decision: {
@@ -119,9 +122,9 @@ export interface AgentTurnArtifactPayload {
     // reasoning EXCLUDED from artifact - it's in agent_decisions table
   };
 
-  // Parsing metadata
-  wasCoerced: boolean;
-  reasoningTruncated: boolean;
+  // Parsing metadata (optional for regenerated artifacts)
+  wasCoerced?: boolean; // undefined if regenerated
+  reasoningTruncated?: boolean; // undefined if regenerated
 
   // Error info (if failed)
   error?: string;
@@ -129,6 +132,9 @@ export interface AgentTurnArtifactPayload {
   // Raw LLM I/O - ONLY when STORE_RAW_LLM_IO=true AND non-production
   rawPrompt?: string;
   rawResponse?: string;
+
+  // Regeneration marker - true if artifact was regenerated after original insert failed
+  wasRegenerated?: boolean;
 }
 
 // ========================================
@@ -146,7 +152,7 @@ export interface AgentTurnLogEntry {
     | "llmAttempt"
     | "persistDecision"
     | "persistArtifact";
-  status: "start" | "success" | "error" | "retry" | "fallback";
+  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved" | "skipped_integrity" | "regenerating" | "regenerated";
   simulationId: string;
   agentId: string;
   tickId: string;
@@ -157,6 +163,7 @@ export interface AgentTurnLogEntry {
   attemptNumber?: number;
   promptHash?: string;
   error?: string;
+  reason?: string;
 }
 
 // ========================================
@@ -182,7 +189,7 @@ export type DayStatus = "pending" | "running" | "completed" | "failed";
 /**
  * Status for simulation ticks.
  */
-export type TickStatus = "pending" | "running" | "completed" | "failed";
+export type TickStatus = "pending" | "running" | "completed" | "partial" | "failed";
 
 /**
  * Database row shape for simulation_days.
@@ -274,4 +281,139 @@ export interface ResolveTickSnapshotParams {
   config?: SimulationConfig;
   daySeed: number;
   hour: number;
+}
+
+// ========================================
+// Tick Runner Types (Step 7)
+// ========================================
+
+/**
+ * Agent info needed to run a tick.
+ */
+export interface TickAgent {
+  id: string;
+  modelName: string;
+  strategy?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for running a single tick.
+ */
+export interface RunTickParams {
+  simulationId: string;
+  day: number;
+  hour: number;
+  /** Optional: pre-fetched agents (if not provided, will be fetched) */
+  agents?: TickAgent[];
+  /** Optional: simulation config for environment/tick snapshot overrides */
+  config?: SimulationConfig;
+  /** Optional: run agents sequentially instead of in parallel (default: false) */
+  sequential?: boolean;
+}
+
+/**
+ * Individual agent result within a tick.
+ */
+export interface TickAgentOutcome {
+  agentId: string;
+  modelName: string;
+  success: boolean;
+  decisionId: string;
+  artifactId: string;
+  decision: AgentDecision;
+  durationMs: number;
+  usedFallback: boolean;
+  /** True if agent was skipped due to existing decision (idempotent retry) */
+  skipped?: boolean;
+  error?: string;
+}
+
+/**
+ * Summary statistics for a tick.
+ */
+export interface TickSummary {
+  totalAgents: number;
+  successfulAgents: number;
+  failedAgents: number;
+  averageDurationMs: number;
+  fallbackCount: number;
+}
+
+/**
+ * Result of running a tick.
+ */
+export interface RunTickResult {
+  tickId: string;
+  dayId: string;
+  day: number;
+  hour: number;
+  status: "completed" | "partial" | "failed";
+  agentOutcomes: TickAgentOutcome[];
+  tickArtifactId: string;
+  durationMs: number;
+  summary: TickSummary;
+  error?: string;
+}
+
+/**
+ * Artifact payload structure for tick kind.
+ * This is what gets stored in simulation_artifacts.artifact JSONB.
+ */
+export interface TickArtifactPayload {
+  version: 1;
+  day: number;
+  hour: number;
+
+  // Timing
+  startedAt: string; // ISO timestamp
+  finishedAt: string; // ISO timestamp
+  durationMs: number;
+
+  // Summary metrics
+  totalAgents: number;
+  successfulAgents: number;
+  failedAgents: number;
+  fallbackCount: number;
+  averageAgentDurationMs: number;
+
+  // Per-agent outcomes (reference agent_turn artifacts for decision data)
+  agentOutcomes: Array<{
+    agentId: string;
+    modelName: string;
+    success: boolean;
+    usedFallback: boolean;
+    durationMs: number;
+    artifactId: string; // Reference to canonical agent_turn artifact
+    error?: string;
+  }>;
+
+  // Environment context for replay
+  environment: EnvironmentSnapshot;
+  tickSnapshot: TickSnapshot;
+}
+
+/**
+ * Structured log entry for tick runner operations.
+ * Per CLAUDE.md guidelines: log metadata, not raw prompts/responses.
+ */
+export interface TickRunnerLogEntry {
+  timestamp: string;
+  operation:
+    | "runTick"
+    | "fetchAgents"
+    | "buildContext"
+    | "runAgentTurn"
+    | "persistArtifact"
+    | "regenerateArtifact";
+  status: "start" | "success" | "error" | "partial" | "skipped";
+  simulationId: string;
+  day: number;
+  hour: number;
+  tickId?: string;
+  agentId?: string;
+  agentCount?: number;
+  duration?: number;
+  error?: string;
+  /** Reason for skipping (when status is "skipped") */
+  reason?: string;
 }
