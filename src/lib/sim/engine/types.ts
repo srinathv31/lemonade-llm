@@ -146,7 +146,7 @@ export interface AgentTurnLogEntry {
     | "llmAttempt"
     | "persistDecision"
     | "persistArtifact";
-  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved";
+  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved" | "skipped_integrity";
   simulationId: string;
   agentId: string;
   tickId: string;
@@ -157,6 +157,7 @@ export interface AgentTurnLogEntry {
   attemptNumber?: number;
   promptHash?: string;
   error?: string;
+  reason?: string;
 }
 
 // ========================================

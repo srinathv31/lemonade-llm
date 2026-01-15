@@ -447,7 +447,24 @@ async function persistTurnData(
 
       return { decisionId, artifactId: existingArtifact.id };
     }
-    // If no artifact exists (edge case: decision inserted, artifact failed), fall through to insert
+
+    // Edge case: decision exists but artifact is missing (original artifact insert failed)
+    // Do NOT create a new artifact - it would have mismatched decision values
+    // (current attempt's decision vs. persisted decision from the winning insert)
+    // Return empty artifactId to surface integrity issue on retry
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistArtifact",
+      status: "skipped_integrity",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+      reason: "Decision conflict but artifact missing - cannot create artifact with potentially mismatched values",
+    });
+
+    return { decisionId, artifactId: "" };
   } else {
     decisionId = insertResult[0].id;
 
