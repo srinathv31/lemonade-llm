@@ -5,6 +5,8 @@ import {
   agent_decisions,
   customer_events,
   simulation_artifacts,
+  simulation_days,
+  simulation_ticks,
 } from "../../db/drizzle/schema";
 import type {
   PromptContext,
@@ -26,6 +28,7 @@ import type {
   TickArtifactPayload,
   TickRunnerLogEntry,
   AgentTurnResult,
+  AgentTurnArtifactPayload,
 } from "./types";
 
 // ========================================
@@ -472,7 +475,37 @@ async function runSingleAgent(
 ): Promise<TickAgentOutcome> {
   // Check for existing decision (idempotent retry support)
   const existing = await fetchExistingDecision(tickId, agent.id);
+
   if (existing) {
+    // Handle integrity error: decision exists but artifact is missing
+    if (existing.status === "integrity_error") {
+      logTickOperation({
+        timestamp: new Date().toISOString(),
+        operation: "runAgentTurn",
+        status: "error",
+        simulationId,
+        day,
+        hour,
+        tickId,
+        agentId: agent.id,
+        error: existing.reason,
+      });
+
+      return {
+        agentId: agent.id,
+        modelName: agent.modelName,
+        success: false,
+        decisionId: existing.decisionId,
+        artifactId: "",
+        decision: existing.decision, // Use canonical decision values
+        durationMs: 0,
+        usedFallback: false,
+        skipped: false,
+        error: existing.reason,
+      };
+    }
+
+    // Happy path: both decision and artifact exist
     logTickOperation({
       timestamp: new Date().toISOString(),
       operation: "runAgentTurn",
@@ -850,13 +883,22 @@ async function fetchPreviousDecision(
 
 /**
  * Existing decision result for idempotent retry support.
+ * Discriminated union to handle integrity errors when decision exists but artifact is missing.
  */
-interface ExistingDecisionResult {
-  decision: AgentDecision;
-  decisionId: string;
-  artifactId: string;
-  usedFallback: boolean;
-}
+type ExistingDecisionResult =
+  | {
+      status: "found";
+      decision: AgentDecision;
+      decisionId: string;
+      artifactId: string;
+      usedFallback: boolean;
+    }
+  | {
+      status: "integrity_error";
+      decisionId: string;
+      decision: AgentDecision;
+      reason: string;
+    };
 
 /**
  * Type guard for agent_turn artifact payload.
@@ -869,6 +911,126 @@ function isAgentTurnPayload(payload: unknown): payload is { usedFallback?: boole
     (!("usedFallback" in payload) ||
       typeof (payload as Record<string, unknown>).usedFallback === "boolean")
   );
+}
+
+/**
+ * Regenerate a missing artifact from the existing decision.
+ * Used when decision exists but artifact was lost (original insert failed).
+ *
+ * Note: Original metadata is lost, so fields like durationMs, attemptCount,
+ * usedFallback are set to undefined. The wasRegenerated flag marks this artifact.
+ */
+async function regenerateMissingArtifact(
+  tickId: string,
+  agentId: string,
+  decision: { id: string; price: number; quality: number | null; marketing: number | null }
+): Promise<{ id: string } | null> {
+  // Fetch tick info for the artifact
+  const [tickInfo] = await db
+    .select({
+      simulationId: simulation_ticks.simulation_id,
+      day: simulation_ticks.day,
+      hour: simulation_ticks.hour,
+    })
+    .from(simulation_ticks)
+    .where(eq(simulation_ticks.id, tickId))
+    .limit(1);
+
+  if (!tickInfo) {
+    return null; // Can't regenerate without tick info
+  }
+
+  // Look up day_id from simulation_days
+  const [dayRecord] = await db
+    .select({ id: simulation_days.id })
+    .from(simulation_days)
+    .where(
+      and(
+        eq(simulation_days.simulation_id, tickInfo.simulationId),
+        eq(simulation_days.day, tickInfo.day)
+      )
+    )
+    .limit(1);
+
+  const dayId = dayRecord?.id ?? null;
+
+  // Fetch agent model name
+  const [agentInfo] = await db
+    .select({ modelName: agents.model_name })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  const now = new Date().toISOString();
+  const payload: AgentTurnArtifactPayload = {
+    version: 1,
+    agentId,
+    modelName: agentInfo?.modelName ?? "unknown",
+    day: tickInfo.day,
+    hour: tickInfo.hour,
+    startedAt: now,
+    finishedAt: now,
+    durationMs: undefined, // Unknown - original metadata lost
+    attemptCount: undefined, // Unknown - original metadata lost
+    usedFallback: undefined, // Unknown - original metadata lost
+    decision: {
+      price: decision.price,
+      quality: decision.quality ?? 5,
+      marketing: decision.marketing ?? 50,
+    },
+    wasCoerced: undefined, // Unknown - original metadata lost
+    reasoningTruncated: undefined, // Unknown - original metadata lost
+    wasRegenerated: true, // Marks this as a recovery artifact
+  };
+
+  const [artifact] = await db
+    .insert(simulation_artifacts)
+    .values({
+      simulation_id: tickInfo.simulationId,
+      day_id: dayId,
+      tick_id: tickId,
+      day: tickInfo.day,
+      hour: tickInfo.hour,
+      agent_id: agentId,
+      kind: "agent_turn",
+      schema_version: 1,
+      model_name: agentInfo?.modelName ?? "unknown",
+      prompt_hash: "regenerated",
+      tool_schema_hash: "regenerated",
+      artifact: payload,
+      is_redacted: true,
+    })
+    .onConflictDoNothing()
+    .returning({ id: simulation_artifacts.id });
+
+  // If conflict (race condition), fetch existing
+  if (!artifact) {
+    const [existing] = await db
+      .select({ id: simulation_artifacts.id })
+      .from(simulation_artifacts)
+      .where(
+        and(
+          eq(simulation_artifacts.tick_id, tickId),
+          eq(simulation_artifacts.agent_id, agentId),
+          eq(simulation_artifacts.kind, "agent_turn")
+        )
+      )
+      .limit(1);
+    return existing ?? null;
+  }
+
+  logTickOperation({
+    timestamp: new Date().toISOString(),
+    operation: "regenerateArtifact",
+    status: "success",
+    simulationId: tickInfo.simulationId,
+    day: tickInfo.day,
+    hour: tickInfo.hour,
+    tickId,
+    agentId,
+  });
+
+  return artifact;
 }
 
 /**
@@ -917,13 +1079,51 @@ async function fetchExistingDecision(
     )
     .limit(1);
 
+  // If artifact not found, regenerate it
+  if (!existingArtifact) {
+    const regeneratedArtifact = await regenerateMissingArtifact(
+      tickId,
+      agentId,
+      existingDecision
+    );
+
+    if (!regeneratedArtifact) {
+      // Regeneration failed - return integrity error with canonical decision values
+      return {
+        status: "integrity_error",
+        decisionId: existingDecision.id,
+        decision: {
+          price: existingDecision.price,
+          quality: existingDecision.quality ?? 5,
+          marketing: existingDecision.marketing ?? 50,
+          reasoning: existingDecision.reasoning ?? "",
+        },
+        reason: "Decision exists but artifact regeneration failed",
+      };
+    }
+
+    // Regenerated artifact - usedFallback is unknown, default to false
+    return {
+      status: "found",
+      decision: {
+        price: existingDecision.price,
+        quality: existingDecision.quality ?? 5,
+        marketing: existingDecision.marketing ?? 50,
+        reasoning: existingDecision.reasoning ?? "",
+      },
+      decisionId: existingDecision.id,
+      artifactId: regeneratedArtifact.id,
+      usedFallback: false, // Unknown for regenerated artifacts, default to false
+    };
+  }
+
   // Extract usedFallback from artifact payload with type-safe check
-  const usedFallback =
-    existingArtifact && isAgentTurnPayload(existingArtifact.artifact)
-      ? (existingArtifact.artifact.usedFallback ?? false)
-      : false;
+  const usedFallback = isAgentTurnPayload(existingArtifact.artifact)
+    ? (existingArtifact.artifact.usedFallback ?? false)
+    : false;
 
   return {
+    status: "found",
     decision: {
       price: existingDecision.price,
       quality: existingDecision.quality ?? 5,
@@ -931,8 +1131,7 @@ async function fetchExistingDecision(
       reasoning: existingDecision.reasoning ?? "",
     },
     decisionId: existingDecision.id,
-    // If artifact not found (edge case), use empty string
-    artifactId: existingArtifact?.id ?? "",
+    artifactId: existingArtifact.id,
     usedFallback,
   };
 }

@@ -449,22 +449,92 @@ async function persistTurnData(
     }
 
     // Edge case: decision exists but artifact is missing (original artifact insert failed)
-    // Do NOT create a new artifact - it would have mismatched decision values
-    // (current attempt's decision vs. persisted decision from the winning insert)
-    // Return empty artifactId to surface integrity issue on retry
+    // Regenerate artifact from canonical decision values to maintain integrity
     logAgentTurnOperation({
       timestamp: new Date().toISOString(),
       operation: "persistArtifact",
-      status: "skipped_integrity",
+      status: "regenerating",
       simulationId: params.simulationId,
       agentId: params.agentId,
       tickId: params.tickId,
       day: params.day,
       hour: params.hour,
-      reason: "Decision conflict but artifact missing - cannot create artifact with potentially mismatched values",
+      reason: "Decision conflict but artifact missing - regenerating from canonical decision",
     });
 
-    return { decisionId, artifactId: "" };
+    // Fetch canonical decision values
+    const [canonicalDecision] = await db
+      .select({
+        price: agent_decisions.price,
+        quality: agent_decisions.quality,
+        marketing: agent_decisions.marketing,
+      })
+      .from(agent_decisions)
+      .where(eq(agent_decisions.id, decisionId))
+      .limit(1);
+
+    if (!canonicalDecision) {
+      // Shouldn't happen - we just fetched the decision ID
+      throw new Error("Failed to fetch canonical decision for artifact regeneration");
+    }
+
+    // Build regenerated artifact with canonical values
+    const regeneratedPayload = buildRegeneratedArtifactPayload(
+      params,
+      canonicalDecision
+    );
+
+    // Insert regenerated artifact
+    // Note: Use "regenerated" sentinel for hashes since original prompt/schema is unknown
+    const [regeneratedArtifact] = await db
+      .insert(simulation_artifacts)
+      .values({
+        simulation_id: params.simulationId,
+        day_id: params.dayId,
+        tick_id: params.tickId,
+        day: params.day,
+        hour: params.hour,
+        agent_id: params.agentId,
+        kind: "agent_turn",
+        schema_version: 1,
+        model_name: params.modelName,
+        prompt_hash: "regenerated",
+        tool_schema_hash: "regenerated",
+        artifact: regeneratedPayload,
+        is_redacted: true,
+      })
+      .onConflictDoNothing()
+      .returning({ id: simulation_artifacts.id });
+
+    // Handle race condition where artifact was inserted by another process
+    if (!regeneratedArtifact) {
+      const [existingArtifact] = await db
+        .select({ id: simulation_artifacts.id })
+        .from(simulation_artifacts)
+        .where(
+          and(
+            eq(simulation_artifacts.tick_id, params.tickId),
+            eq(simulation_artifacts.agent_id, params.agentId),
+            eq(simulation_artifacts.kind, "agent_turn")
+          )
+        )
+        .limit(1);
+
+      return { decisionId, artifactId: existingArtifact?.id ?? "" };
+    }
+
+    logAgentTurnOperation({
+      timestamp: new Date().toISOString(),
+      operation: "persistArtifact",
+      status: "regenerated",
+      simulationId: params.simulationId,
+      agentId: params.agentId,
+      tickId: params.tickId,
+      day: params.day,
+      hour: params.hour,
+    });
+
+    return { decisionId, artifactId: regeneratedArtifact.id };
   } else {
     decisionId = insertResult[0].id;
 
@@ -619,5 +689,39 @@ function buildArtifactPayload(
   return {
     payload: basePayload,
     isRedacted: true,
+  };
+}
+
+/**
+ * Build a regenerated artifact payload using canonical decision values.
+ * Used when decision conflict occurred but artifact was missing.
+ *
+ * Note: Original metadata is lost, so fields like durationMs, attemptCount,
+ * usedFallback are set to undefined. The wasRegenerated flag marks this artifact.
+ */
+function buildRegeneratedArtifactPayload(
+  params: AgentTurnParams,
+  decision: { price: number; quality: number | null; marketing: number | null }
+): AgentTurnArtifactPayload {
+  const now = new Date().toISOString();
+  return {
+    version: 1,
+    agentId: params.agentId,
+    modelName: params.modelName,
+    day: params.day,
+    hour: params.hour,
+    startedAt: now,
+    finishedAt: now,
+    durationMs: undefined, // Unknown - original metadata lost
+    attemptCount: undefined, // Unknown - original metadata lost
+    usedFallback: undefined, // Unknown - original metadata lost
+    decision: {
+      price: decision.price,
+      quality: decision.quality ?? 5,
+      marketing: decision.marketing ?? 50,
+    },
+    wasCoerced: undefined, // Unknown - original metadata lost
+    reasoningTruncated: undefined, // Unknown - original metadata lost
+    wasRegenerated: true, // Marks this as a recovery artifact
   };
 }

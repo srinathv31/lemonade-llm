@@ -93,6 +93,9 @@ export interface LLMAttemptResult {
 /**
  * Artifact payload structure for agent_turn kind.
  * This is what gets stored in simulation_artifacts.artifact JSONB.
+ *
+ * Note: Some fields are optional to support regenerated artifacts where
+ * original metadata was lost. Check `wasRegenerated` to identify these.
  */
 export interface AgentTurnArtifactPayload {
   // Always present (even when redacted)
@@ -102,14 +105,14 @@ export interface AgentTurnArtifactPayload {
   day: number;
   hour: number;
 
-  // Timing
+  // Timing (optional for regenerated artifacts)
   startedAt: string; // ISO timestamp
   finishedAt: string; // ISO timestamp
-  durationMs: number;
+  durationMs?: number; // undefined if regenerated
 
-  // Attempt tracking
-  attemptCount: number;
-  usedFallback: boolean;
+  // Attempt tracking (optional for regenerated artifacts)
+  attemptCount?: number; // undefined if regenerated
+  usedFallback?: boolean; // undefined if regenerated
 
   // Decision outcome (always present)
   decision: {
@@ -119,9 +122,9 @@ export interface AgentTurnArtifactPayload {
     // reasoning EXCLUDED from artifact - it's in agent_decisions table
   };
 
-  // Parsing metadata
-  wasCoerced: boolean;
-  reasoningTruncated: boolean;
+  // Parsing metadata (optional for regenerated artifacts)
+  wasCoerced?: boolean; // undefined if regenerated
+  reasoningTruncated?: boolean; // undefined if regenerated
 
   // Error info (if failed)
   error?: string;
@@ -129,6 +132,9 @@ export interface AgentTurnArtifactPayload {
   // Raw LLM I/O - ONLY when STORE_RAW_LLM_IO=true AND non-production
   rawPrompt?: string;
   rawResponse?: string;
+
+  // Regeneration marker - true if artifact was regenerated after original insert failed
+  wasRegenerated?: boolean;
 }
 
 // ========================================
@@ -146,7 +152,7 @@ export interface AgentTurnLogEntry {
     | "llmAttempt"
     | "persistDecision"
     | "persistArtifact";
-  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved" | "skipped_integrity";
+  status: "start" | "success" | "error" | "retry" | "fallback" | "conflict_resolved" | "skipped_integrity" | "regenerating" | "regenerated";
   simulationId: string;
   agentId: string;
   tickId: string;
@@ -397,7 +403,8 @@ export interface TickRunnerLogEntry {
     | "fetchAgents"
     | "buildContext"
     | "runAgentTurn"
-    | "persistArtifact";
+    | "persistArtifact"
+    | "regenerateArtifact";
   status: "start" | "success" | "error" | "partial" | "skipped";
   simulationId: string;
   day: number;
