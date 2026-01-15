@@ -54,12 +54,14 @@
   - Integrated into tick runner, outcomes attached to tick artifact
   - Files: `src/lib/sim/customers/{types,modifiers,demand,engine,index}.ts`
 
-## In Progress
+- [x] Step 9: Day Runner
+  - `runDay()` orchestrates 8 ticks (hours 9-16)
+  - Aggregates results: `calculateDaySummary()`, `aggregateAgentDailySummaries()`
+  - Writes day artifact (kind: "day") with tick references
+  - Persists summary metrics to `simulation_metrics` table
+  - Files: `src/lib/sim/engine/day-runner/{run-day,aggregation,artifact,metrics,utils,index}.ts`
 
-- [ ] Step 9: Day Runner
-  - Loop through 8 ticks (9am–5pm)
-  - Post-day aggregation
-  - Write day artifact + summary metrics
+## In Progress
 
 - [ ] Step 10: Replay Queries
   - Load full simulation replay

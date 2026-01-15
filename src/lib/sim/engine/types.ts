@@ -188,7 +188,7 @@ export interface SimulationConfig {
 /**
  * Status for simulation days.
  */
-export type DayStatus = "pending" | "running" | "completed" | "failed";
+export type DayStatus = "pending" | "running" | "completed" | "partial" | "failed";
 
 /**
  * Status for simulation ticks.
@@ -425,4 +425,137 @@ export interface TickRunnerLogEntry {
   error?: string;
   /** Reason for skipping (when status is "skipped") */
   reason?: string;
+}
+
+// ========================================
+// Day Runner Types (Step 9)
+// ========================================
+
+/**
+ * Parameters for running a single simulation day.
+ */
+export interface RunDayParams {
+  simulationId: string;
+  day: number;
+  /** Optional: pre-fetched agents (avoids N fetches per tick) */
+  agents?: TickAgent[];
+  /** Optional: simulation config for environment/tick snapshot overrides */
+  config?: SimulationConfig;
+  /** Optional: run agents sequentially instead of in parallel (default: false) */
+  sequential?: boolean;
+}
+
+/**
+ * Result of running a day.
+ */
+export interface RunDayResult {
+  dayId: string;
+  day: number;
+  status: "completed" | "partial" | "failed";
+  tickResults: RunTickResult[];
+  dayArtifactId: string;
+  durationMs: number;
+  summary: DaySummary;
+  agentDailySummaries: AgentDailySummary[];
+  error?: string;
+}
+
+/**
+ * Summary statistics for a day.
+ */
+export interface DaySummary {
+  totalTicks: number;
+  completedTicks: number;
+  partialTicks: number;
+  failedTicks: number;
+  totalAgentTurns: number;
+  successfulAgentTurns: number;
+  failedAgentTurns: number;
+  fallbackCount: number;
+  averageTickDurationMs: number;
+  totalCustomers: number;
+  totalRevenue: number;
+}
+
+/**
+ * Per-agent daily summary for aggregation.
+ */
+export interface AgentDailySummary {
+  agentId: string;
+  modelName: string;
+  ticksParticipated: number;
+  successfulDecisions: number;
+  fallbackDecisions: number;
+  totalCustomersServed: number;
+  totalRevenue: number;
+  averagePrice: number;
+  averageQuality: number;
+  averageMarketing: number;
+  marketShareAverage: number;
+}
+
+/**
+ * Artifact payload structure for day kind.
+ * Stored in simulation_artifacts.artifact JSONB.
+ */
+export interface DayArtifactPayload {
+  version: 1;
+  day: number;
+  seed: number;
+
+  // Timing
+  startedAt: string; // ISO timestamp
+  finishedAt: string; // ISO timestamp
+  durationMs: number;
+
+  // Environment context
+  environment: EnvironmentSnapshot;
+
+  // Tick summary
+  totalTicks: number;
+  completedTicks: number;
+  partialTicks: number;
+  failedTicks: number;
+
+  // Per-tick references (for drill-down)
+  tickSummaries: Array<{
+    hour: number;
+    tickId: string;
+    tickArtifactId: string;
+    status: "completed" | "partial" | "failed";
+    durationMs: number;
+    agentCount: number;
+    successfulAgents: number;
+    totalCustomers: number;
+    totalRevenue: number;
+  }>;
+
+  // Agent daily aggregates
+  agentSummaries: AgentDailySummary[];
+
+  // Day-level metrics
+  totalCustomers: number;
+  totalRevenue: number;
+  averageTickDurationMs: number;
+}
+
+/**
+ * Structured log entry for day runner operations.
+ */
+export interface DayRunnerLogEntry {
+  timestamp: string;
+  operation:
+    | "runDay"
+    | "runTick"
+    | "aggregate"
+    | "persistArtifact"
+    | "persistMetrics";
+  status: "start" | "success" | "error" | "partial";
+  simulationId: string;
+  day: number;
+  dayId?: string;
+  tickCount?: number;
+  hour?: number;
+  duration?: number;
+  error?: string;
 }
