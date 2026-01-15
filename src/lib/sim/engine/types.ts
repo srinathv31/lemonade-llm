@@ -189,7 +189,7 @@ export type DayStatus = "pending" | "running" | "completed" | "failed";
 /**
  * Status for simulation ticks.
  */
-export type TickStatus = "pending" | "running" | "completed" | "failed";
+export type TickStatus = "pending" | "running" | "completed" | "partial" | "failed";
 
 /**
  * Database row shape for simulation_days.

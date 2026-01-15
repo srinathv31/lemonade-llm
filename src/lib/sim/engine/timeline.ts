@@ -415,7 +415,7 @@ export async function updateTickStatus(
     updates.started_at = new Date();
     updates.finished_at = null; // Clear for retry scenarios
     updates.error = null;       // Clear previous error
-  } else if (status === "completed" || status === "failed") {
+  } else if (status === "completed" || status === "partial" || status === "failed") {
     updates.finished_at = new Date();
     if (error) {
       updates.error = error;

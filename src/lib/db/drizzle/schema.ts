@@ -175,7 +175,7 @@ export const simulation_days = pgTable(
     seed: integer("seed"), // RNG seed for deterministic replay
     env_snapshot: jsonb("env_snapshot"), // weather baseline, demand params, etc.
 
-    status: text("status").notNull().default("pending"), // pending|running|completed|failed
+    status: text("status").notNull().default("pending"), // pending|running|completed|partial|failed
     started_at: timestamp("started_at", { withTimezone: true }),
     finished_at: timestamp("finished_at", { withTimezone: true }),
 
@@ -210,7 +210,7 @@ export const simulation_ticks = pgTable(
     // Optional tick-level env snapshot
     tick_snapshot: jsonb("tick_snapshot"), // e.g., weather change, events
 
-    status: text("status").notNull().default("pending"), // pending|running|completed|failed
+    status: text("status").notNull().default("pending"), // pending|running|completed|partial|failed
     error: text("error"),
 
     started_at: timestamp("started_at", { withTimezone: true }),

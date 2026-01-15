@@ -363,11 +363,7 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
   }
 
   // Step 8: Update tick status
-  await updateTickStatus(
-    tickId,
-    status === "failed" ? "failed" : "completed",
-    errorMessage
-  );
+  await updateTickStatus(tickId, status, errorMessage);
 
   logTickOperation({
     timestamp: new Date().toISOString(),
