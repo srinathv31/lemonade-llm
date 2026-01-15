@@ -45,12 +45,16 @@
   - Writes tick artifact (kind: "tick", always redacted)
   - Files: `src/lib/sim/engine/tick-runner.ts`
 
-## In Progress
+- [x] Step 8: Customer Engine
+  - Deterministic demand calculation with proportional market share
+  - Multiplicative scoring: `AgentScore = PriceScore × QualityScore × MarketingScore`
+  - Weather and special event modifiers affect base demand
+  - Seeded RNG (Mulberry32) for deterministic customer distribution
+  - Persists to `customer_events` table with full `demand_factors` breakdown
+  - Integrated into tick runner, outcomes attached to tick artifact
+  - Files: `src/lib/sim/customers/{types,modifiers,demand,engine,index}.ts`
 
-- [ ] Step 8: Customer Engine
-  - Deterministic demand calculation
-  - Insert customer_events
-  - Attach outcomes to tick replay
+## In Progress
 
 - [ ] Step 9: Day Runner
   - Loop through 8 ticks (9am–5pm)

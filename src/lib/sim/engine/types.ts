@@ -4,6 +4,10 @@ import type {
   EnvironmentSnapshot,
   TickSnapshot,
 } from "../prompts";
+import type {
+  CustomerEngineOutput,
+  CustomerEngineArtifactSection,
+} from "../customers";
 
 // ========================================
 // Input Parameters
@@ -352,6 +356,8 @@ export interface RunTickResult {
   tickArtifactId: string;
   durationMs: number;
   summary: TickSummary;
+  /** Customer engine results (Step 8) */
+  customerOutcomes?: CustomerEngineOutput;
   error?: string;
 }
 
@@ -390,6 +396,9 @@ export interface TickArtifactPayload {
   // Environment context for replay
   environment: EnvironmentSnapshot;
   tickSnapshot: TickSnapshot;
+
+  // Customer engine results (Step 8)
+  customerEngine?: CustomerEngineArtifactSection;
 }
 
 /**

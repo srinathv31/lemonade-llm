@@ -19,6 +19,12 @@ import type {
 } from "../prompts";
 import { runAgentTurn } from "./agent-turn";
 import { ensureDay, ensureTick, updateTickStatus } from "./timeline";
+import {
+  runCustomerEngine,
+  buildCustomerEngineArtifactSection,
+  type CustomerEngineOutput,
+  type CustomerEngineArtifactSection,
+} from "../customers";
 import type {
   RunTickParams,
   RunTickResult,
@@ -266,6 +272,52 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
   const missingArtifacts = agentOutcomes.filter((o) => o.artifactId === "");
   const hasIntegrityIssue = missingArtifacts.length > 0;
 
+  // Step 5.6: Run customer engine (Step 8 - demand calculation)
+  let customerOutcomes: CustomerEngineOutput | undefined;
+  let customerEngineArtifact: CustomerEngineArtifactSection | undefined;
+
+  // Only run customer engine if we have successful agents with decisions
+  const successfulAgents = agentOutcomes.filter(
+    (o) => o.success || o.usedFallback
+  );
+  if (successfulAgents.length > 0) {
+    const customerResult = await runCustomerEngine({
+      simulationId,
+      tickId,
+      dayId,
+      day,
+      hour,
+      envSnapshot,
+      tickSnapshot,
+      agentDecisions: successfulAgents.map((o) => ({
+        agentId: o.agentId,
+        decision: o.decision,
+      })),
+      seed,
+    });
+
+    if (customerResult.success) {
+      customerOutcomes = customerResult.output;
+      customerEngineArtifact = buildCustomerEngineArtifactSection(
+        customerResult.output,
+        envSnapshot
+      );
+    } else {
+      // Log customer engine failure but don't fail the tick
+      const customerError = customerResult.error;
+      logTickOperation({
+        timestamp: new Date().toISOString(),
+        operation: "runTick",
+        status: "error",
+        simulationId,
+        day,
+        hour,
+        tickId,
+        error: `Customer engine failed: ${customerError}`,
+      });
+    }
+  }
+
   // Step 6: Determine status
   let status: "completed" | "partial" | "failed";
   let errorMessage: string | undefined;
@@ -336,6 +388,7 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
       agentOutcomes,
       envSnapshot,
       tickSnapshot,
+      customerEngine: customerEngineArtifact,
     });
 
     logTickOperation({
@@ -388,6 +441,7 @@ export async function runTick(params: RunTickParams): Promise<RunTickResult> {
     tickArtifactId,
     durationMs,
     summary,
+    customerOutcomes,
     error: errorMessage,
   };
 }
@@ -1215,6 +1269,8 @@ interface PersistTickArtifactParams {
   agentOutcomes: TickAgentOutcome[];
   envSnapshot: EnvironmentSnapshot;
   tickSnapshot: TickSnapshot;
+  /** Customer engine artifact section (Step 8) */
+  customerEngine?: CustomerEngineArtifactSection;
 }
 
 /**
@@ -1236,6 +1292,7 @@ async function persistTickArtifact(
     agentOutcomes,
     envSnapshot,
     tickSnapshot,
+    customerEngine,
   } = params;
 
   const missingArtifactRefs = agentOutcomes.filter((o) => o.artifactId === "");
@@ -1271,6 +1328,7 @@ async function persistTickArtifact(
     })),
     environment: envSnapshot,
     tickSnapshot,
+    customerEngine,
   };
 
   const [artifactRow] = await db
