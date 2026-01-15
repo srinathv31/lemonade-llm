@@ -12,7 +12,7 @@ export {
 } from "./timeline";
 
 // Tick Runner (Step 7)
-export { runTick } from "./tick-runner";
+export { runTick } from "./tick-runner/index";
 
 // Types
 export type {
