@@ -76,9 +76,12 @@
   - Files: `src/app/api/simulations/{schemas,errors,utils}.ts`
   - Routes: `create/`, `list/`, `[id]/`, `[id]/run-day/`, `[id]/run/`
 
+- [x] Step 12: Dashboard UI
+  - Simulation list + detail pages
+  - Replay view (day/tick timeline)
+  - Basic metrics & charts (revenue, market share)
+  - Files: `src/app/(dashboard)/`, `src/components/simulations/`, `src/components/replay/`, `src/components/charts/`
+
 ## In Progress
 
-- [ ] Step 12: Dashboard UI
-  - Simulation list + detail
-  - Replay view (day/tick timeline)
-  - Basic metrics & charts
+(none)
