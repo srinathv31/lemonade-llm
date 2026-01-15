@@ -14,6 +14,9 @@ export {
 // Tick Runner (Step 7)
 export { runTick } from "./tick-runner/index";
 
+// Day Runner (Step 9)
+export { runDay } from "./day-runner/index";
+
 // Types
 export type {
   // Agent Turn Types
@@ -44,4 +47,11 @@ export type {
   TickSummary,
   TickArtifactPayload,
   TickRunnerLogEntry,
+  // Day Runner Types (Step 9)
+  RunDayParams,
+  RunDayResult,
+  DaySummary,
+  AgentDailySummary,
+  DayArtifactPayload,
+  DayRunnerLogEntry,
 } from "./types";
