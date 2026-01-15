@@ -90,7 +90,7 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Filters
 
-- [ ] Status filter dropdown in page header
+- [x] Status filter dropdown in page header
   - Options: All, Pending, Running, Completed, Partial, Failed
   - URL search params for state
 
@@ -100,28 +100,28 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Page Structure
 
-- [ ] `src/app/(dashboard)/simulations/[id]/page.tsx` (RSC)
+- [x] `src/app/(dashboard)/simulations/[id]/page.tsx` (RSC)
   - Fetch simulation with `getSimulation(id)`
   - Display overview, agents, day progress
-- [ ] `src/app/(dashboard)/simulations/[id]/loading.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/loading.tsx`
   - Skeleton for header, agent list, day grid
-- [ ] `src/app/(dashboard)/simulations/[id]/error.tsx`
+- [x] `src/app/(dashboard)/simulations/[id]/error.tsx`
   - Error alert with back link
 
 ### Components
 
-- [ ] `src/components/simulations/simulation-header.tsx`
+- [x] `src/components/simulations/simulation-header.tsx`
   - Name, status badge, config summary
   - Created/finished timestamps
-- [ ] `src/components/simulations/agent-list.tsx`
+- [x] `src/components/simulations/agent-list.tsx`
   - List of agents with model names
   - Strategy info if present
-- [ ] `src/components/simulations/day-progress-grid.tsx`
+- [x] `src/components/simulations/day-progress-grid.tsx`
   - Grid of day numbers (1 to numDays)
   - Status-colored cells
   - Click navigates to day replay
   - Shows tick completion (e.g., "6/8 ticks")
-- [ ] `src/components/simulations/run-controls.tsx` (client)
+- [x] `src/components/simulations/run-controls.tsx` (client)
   - "Run Day X" button (next pending day)
   - "Run All" button (remaining days)
   - useTransition for loading state
@@ -130,7 +130,7 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Summary Card
 
-- [ ] `src/components/simulations/simulation-summary.tsx`
+- [x] `src/components/simulations/simulation-summary.tsx`
   - Total revenue across all agents
   - Days completed / total
   - Ticks completed / total
