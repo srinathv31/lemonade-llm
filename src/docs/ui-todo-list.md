@@ -10,32 +10,30 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Setup
 
-- [ ] Install shadcn chart component
+- [x] Install shadcn chart component
   ```bash
   npx shadcn@latest add chart
   ```
 
 ### Dashboard Layout
 
-- [ ] Create `(dashboard)` route group
+- [x] Create `(dashboard)` route group
   - `src/app/(dashboard)/layout.tsx` - Main layout with sidebar
   - `src/app/(dashboard)/page.tsx` - Redirect to /simulations
 
 ### Sidebar Components
 
-- [ ] `src/components/dashboard/sidebar.tsx` (client)
-  - Collapsible sidebar with localStorage persistence
+- [x] `src/components/dashboard/app-sidebar.tsx` (client)
+  - Collapsible sidebar with cookie persistence
   - Responsive: expanded on desktop, collapsed on mobile
   - Toggle button with animation
-- [ ] `src/components/dashboard/sidebar-nav.tsx`
-  - Navigation links: Simulations, Settings
-  - Active state highlighting
-- [ ] `src/components/dashboard/breadcrumb.tsx`
+- [x] `src/components/dashboard/breadcrumb.tsx`
   - Dynamic breadcrumb from route segments
+  - Active state highlighting
 
 ### Server Actions
 
-- [ ] `src/app/actions/simulations.ts`
+- [x] `src/app/actions/simulations.ts`
   - `createSimulation(formData: FormData)` - Create new simulation
   - `deleteSimulation(id: string)` - Delete simulation
   - `runSimulationDay(simulationId, day)` - Run single day
@@ -43,10 +41,10 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Query Functions
 
-- [ ] `src/lib/queries/simulations.ts`
+- [x] `src/lib/queries/simulations.ts`
   - `getSimulations(status?, limit?, offset?)` - List simulations
   - `getSimulation(id)` - Get simulation with agents and days
-- [ ] `src/lib/queries/replay.ts`
+- [x] `src/lib/queries/replay.ts`
   - Re-export from `src/lib/sim/replay/queries.ts`
 
 ---
@@ -55,37 +53,36 @@ Step 12 of the Lemonade Stand Simulation project.
 
 ### Page Structure
 
-- [ ] `src/app/(dashboard)/simulations/page.tsx` (RSC)
+- [x] `src/app/(dashboard)/simulations/page.tsx` (RSC)
   - Fetch simulations with `getSimulations()`
   - Pass data to list component
-- [ ] `src/app/(dashboard)/simulations/loading.tsx`
+- [x] `src/app/(dashboard)/simulations/loading.tsx`
   - Skeleton grid (6 cards)
-- [ ] `src/app/(dashboard)/simulations/error.tsx`
+- [x] `src/app/(dashboard)/simulations/error.tsx`
   - Error alert with retry button
 
 ### Components
 
-- [ ] `src/components/simulations/simulation-list.tsx`
+- [x] `src/components/simulations/simulation-list.tsx`
   - Grid layout (1 col mobile, 2 col tablet, 3 col desktop)
   - Map simulations to cards
   - Empty state when no simulations
-- [ ] `src/components/simulations/simulation-card.tsx`
+- [x] `src/components/simulations/simulation-card.tsx`
   - Card with name, status badge, agent count, date
   - Click navigates to detail page
-  - Quick action buttons (run, delete)
-- [ ] `src/components/simulations/simulation-status-badge.tsx`
+- [x] `src/components/simulations/simulation-status-badge.tsx`
   - Status-colored badge (pending, running, completed, partial, failed)
   - Colors: pending=gray, running=blue, completed=green, partial=yellow, failed=red
 
 ### Dialogs (Client Components)
 
-- [ ] `src/components/simulations/create-simulation-dialog.tsx`
+- [x] `src/components/simulations/create-simulation-dialog.tsx`
   - Dialog with form
-  - Fields: name, model selection (multi-select), config options
+  - Fields: name, model selection, numDays config
   - useTransition for loading state
   - Calls `createSimulation` server action
   - revalidatePath on success
-- [ ] `src/components/simulations/delete-simulation-dialog.tsx`
+- [x] `src/components/simulations/delete-simulation-dialog.tsx`
   - Confirmation dialog
   - Shows simulation name
   - useTransition for loading state
