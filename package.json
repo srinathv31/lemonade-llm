@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "test:agent-turn": "npx tsx scripts/test-agent-turn.ts",
-    "test:timeline": "npx tsx scripts/test-timeline.ts"
+    "test:timeline": "npx tsx scripts/test-timeline.ts",
+    "test:tick-runner": "npx tsx scripts/test-tick-runner.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
