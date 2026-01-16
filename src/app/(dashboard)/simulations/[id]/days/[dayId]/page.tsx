@@ -5,8 +5,10 @@ import { DayOverview } from "@/components/replay/day-overview";
 import { EnvironmentCard } from "@/components/replay/environment-card";
 import { TickTimeline } from "@/components/replay/tick-timeline";
 import { AgentDailySummary } from "@/components/replay/agent-daily-summary";
-import { RevenueChart } from "@/components/charts/revenue-chart";
-import { MarketShareChart } from "@/components/charts/market-share-chart";
+import {
+  DynamicRevenueChart,
+  DynamicMarketShareChart,
+} from "@/components/charts/dynamic-charts";
 
 interface DayReplayPageProps {
   params: Promise<{ id: string; dayId: string }>;
@@ -48,14 +50,14 @@ export default async function DayReplayPage({ params }: DayReplayPageProps) {
             dayId={dayId}
           />
           {day.ticks.length > 0 && (
-            <RevenueChart ticks={day.ticks} />
+            <DynamicRevenueChart ticks={day.ticks} />
           )}
         </div>
 
         <div className="space-y-6">
           {day.agentSummaries.length > 0 && (
             <>
-              <MarketShareChart agentSummaries={day.agentSummaries} />
+              <DynamicMarketShareChart agentSummaries={day.agentSummaries} />
               <AgentDailySummary agentSummaries={day.agentSummaries} />
             </>
           )}

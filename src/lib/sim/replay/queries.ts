@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { eq, and } from "drizzle-orm";
 import db from "../../db/drizzle";
 import {
@@ -31,10 +32,11 @@ import type { DemandFactors } from "../customers";
 /**
  * Load day replay by dayId.
  * Returns day overview with tick summaries for navigation.
+ * Wrapped with React.cache() for per-request deduplication.
  */
-export async function loadDayReplay(
+export const loadDayReplay = cache(async (
   dayId: string
-): Promise<ReplayResult<DayReplayResponse>> {
+): Promise<ReplayResult<DayReplayResponse>> => {
   try {
     // 1. Fetch day record
     const [dayRecord] = await db
@@ -84,7 +86,7 @@ export async function loadDayReplay(
       error: databaseError(err instanceof Error ? err.message : String(err)),
     };
   }
-}
+});
 
 // ========================================
 // Tick Replay Query
@@ -93,10 +95,11 @@ export async function loadDayReplay(
 /**
  * Load tick replay by tickId.
  * Returns full tick details with agent decisions and customer outcomes.
+ * Wrapped with React.cache() for per-request deduplication.
  */
-export async function loadTickReplay(
+export const loadTickReplay = cache(async (
   tickId: string
-): Promise<ReplayResult<TickReplayResponse>> {
+): Promise<ReplayResult<TickReplayResponse>> => {
   try {
     // 1. Fetch tick record
     const [tickRecord] = await db
@@ -231,4 +234,4 @@ export async function loadTickReplay(
       error: databaseError(err instanceof Error ? err.message : String(err)),
     };
   }
-}
+});

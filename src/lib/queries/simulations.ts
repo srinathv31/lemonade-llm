@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { eq, desc, count, sql } from "drizzle-orm";
 import db from "@/lib/db/drizzle";
 import {
@@ -77,10 +78,11 @@ export interface GetSimulationsResult {
 
 /**
  * Get paginated list of simulations with optional status filter.
+ * Wrapped with React.cache() for per-request deduplication.
  */
-export async function getSimulations(
+export const getSimulations = cache(async (
   params: GetSimulationsParams = {}
-): Promise<GetSimulationsResult> {
+): Promise<GetSimulationsResult> => {
   const { status, limit = 50, offset = 0 } = params;
 
   // Build where clause
@@ -141,15 +143,16 @@ export async function getSimulations(
   }));
 
   return { simulations: simulationsList, total };
-}
+});
 
 /**
  * Get simulation with full details including agents, days, and summary.
  * Returns null if not found.
+ * Wrapped with React.cache() for per-request deduplication.
  */
-export async function getSimulation(
+export const getSimulation = cache(async (
   id: string
-): Promise<SimulationWithDetails | null> {
+): Promise<SimulationWithDetails | null> => {
   // 1. Fetch simulation record
   const [simulation] = await db
     .select()
@@ -255,4 +258,4 @@ export async function getSimulation(
       totalRevenue,
     },
   };
-}
+});

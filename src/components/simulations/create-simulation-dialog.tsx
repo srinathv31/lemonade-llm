@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
+import useSWR from "swr";
 import { Plus, X, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +29,10 @@ interface CreateSimulationDialogProps {
   trigger?: React.ReactNode;
 }
 
+// SWR fetcher for Ollama models
+const modelsFetcher = (url: string) =>
+  fetch(url).then((res) => res.json()) as Promise<{ models: OllamaModel[] }>;
+
 export function CreateSimulationDialog({
   trigger,
 }: CreateSimulationDialogProps) {
@@ -36,41 +41,21 @@ export function CreateSimulationDialog({
   const [numDays, setNumDays] = useState(5);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [currentModel, setCurrentModel] = useState<string>("");
-  const [availableModels, setAvailableModels] = useState<OllamaModel[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Fetch models when dialog opens
-  useEffect(() => {
-    if (!open || availableModels.length > 0) return;
-
-    let cancelled = false;
-
-    async function fetchModels() {
-      try {
-        const res = await fetch("/api/ollama/models");
-        const data = await res.json();
-        if (!cancelled && data.models) {
-          setAvailableModels(data.models);
-        }
-      } catch {
-        if (!cancelled) {
-          setError("Failed to fetch available models");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingModels(false);
-        }
-      }
+  // SWR handles caching, deduplication, and revalidation automatically
+  // Only fetches when dialog is open (conditional fetching)
+  const { data, isLoading: loadingModels } = useSWR(
+    open ? "/api/ollama/models" : null,
+    modelsFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
     }
+  );
 
-    fetchModels();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, availableModels.length]);
+  const availableModels = data?.models ?? [];
 
   function handleAddAgent() {
     if (currentModel && !selectedModels.includes(currentModel)) {
@@ -116,10 +101,6 @@ export function CreateSimulationDialog({
 
   function handleOpenChange(newOpen: boolean) {
     setOpen(newOpen);
-    if (newOpen && availableModels.length === 0) {
-      // Set loading state when opening with no cached models
-      setLoadingModels(true);
-    }
     if (!newOpen) {
       // Reset form on close
       setName("");
