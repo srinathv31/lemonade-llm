@@ -26,20 +26,21 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+// Format actual hour (9-16) to display string
 function formatHour(hour: number): string {
-  const displayHour = hour + 9;
-  if (displayHour === 12) return "12PM";
-  if (displayHour < 12) return `${displayHour}AM`;
-  return `${displayHour - 12}PM`;
+  if (hour === 12) return "12PM";
+  if (hour < 12) return `${hour}AM`;
+  return `${hour - 12}PM`;
 }
 
 export function RevenueChart({ ticks }: RevenueChartProps) {
   const chartData = useMemo(() => {
-    // Create data for all 8 hours
+    // Create data for all 8 hours (9am-4pm, actual hours 9-16)
     return Array.from({ length: 8 }, (_, i) => {
-      const tick = ticks.find((t) => t.hour === i);
+      const hour = i + 9;
+      const tick = ticks.find((t) => t.hour === hour);
       return {
-        hour: formatHour(i),
+        hour: formatHour(hour),
         revenue: tick?.totalRevenue ?? 0,
         customers: tick?.totalCustomers ?? 0,
       };

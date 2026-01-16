@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { cn, formatCurrency, formatHour } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
@@ -10,6 +10,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { TickSummaryEntry } from "@/lib/sim/replay/types";
+
+// Format actual hour (9-16) to display string
+function formatHourDisplay(hour: number): string {
+  if (hour === 12) return "12 PM";
+  if (hour < 12) return `${hour} AM`;
+  return `${hour - 12} PM`;
+}
 
 interface TickTimelineProps {
   ticks: TickSummaryEntry[];
@@ -34,8 +41,8 @@ export function TickTimeline({
   simulationId,
   dayId,
 }: TickTimelineProps) {
-  // Create array of 8 hours (9am-5pm, hours 0-7)
-  const hours = Array.from({ length: 8 }, (_, i) => i);
+  // Create array of 8 hours (9am-4pm, actual hours 9-16)
+  const hours = Array.from({ length: 8 }, (_, i) => i + 9);
   const tickMap = new Map(ticks.map((t) => [t.hour, t]));
 
   return (
@@ -76,7 +83,7 @@ export function TickTimeline({
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
                     <div className="space-y-1">
-                      <div className="font-medium">{formatHour(hour)}</div>
+                      <div className="font-medium">{formatHourDisplay(hour)}</div>
                       {tick ? (
                         <>
                           <div className="capitalize">Status: {tick.status}</div>
@@ -127,7 +134,7 @@ interface TickSlotProps {
 function TickSlot({ hour, tick }: TickSlotProps) {
   return (
     <div className="text-center space-y-1">
-      <div className="text-xs font-medium">{formatHour(hour)}</div>
+      <div className="text-xs font-medium">{formatHourDisplay(hour)}</div>
       {tick ? (
         <>
           <div
